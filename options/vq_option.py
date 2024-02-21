@@ -8,15 +8,15 @@ def arg_parse(is_train=False):
     ## dataloader
     parser.add_argument('--dataset_name', type=str, default='humanml3d', help='dataset directory')
     parser.add_argument('--batch_size', default=256, type=int, help='batch size')
-    parser.add_argument('--window_size', type=int, default=64, help='training motion length')
+    parser.add_argument('--window_size', type=int, default=int(64*1.5), help='training motion length')
     parser.add_argument("--gpu_id", type=int, default=0, help='GPU id')
 
     ## optimization
     parser.add_argument('--max_epoch', default=50, type=int, help='number of total epochs to run')
     # parser.add_argument('--total_iter', default=None, type=int, help='number of total iterations to run')
-    parser.add_argument('--warm_up_iter', default=2000, type=int, help='number of total iterations for warmup')
+    parser.add_argument('--warm_up_iter', default=8*2000, type=int, help='number of total iterations for warmup')
     parser.add_argument('--lr', default=2e-4, type=float, help='max learning rate')
-    parser.add_argument('--milestones', default=[150000, 250000], nargs="+", type=int, help="learning rate schedule (iterations)")
+    parser.add_argument('--milestones', default=[8*150000, 8*250000], nargs="+", type=int, help="learning rate schedule (iterations)")
     parser.add_argument('--gamma', default=0.1, type=float, help="learning rate decay")
 
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight decay')

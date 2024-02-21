@@ -78,7 +78,7 @@ if __name__ == '__main__':
     vq_model.to(opt.device)
 
     ##### ---- Data ---- #####
-    max_motion_length = 196
+    max_motion_length = 294
     mean = np.load(pjoin(opt.checkpoints_dir, opt.dataset_name, model_opt.vq_name, 'meta', 'mean.npy'))
     std = np.load(pjoin(opt.checkpoints_dir, opt.dataset_name, model_opt.vq_name, 'meta', 'std.npy'))
     def inv_transform(data):
@@ -188,8 +188,8 @@ if __name__ == '__main__':
             ik_save_path = pjoin(animation_path, "sample%d_repeat%d_len%d_ik.mp4"%(k, r, m_length[k]))
             source_save_path = pjoin(animation_path, "sample%d_source_len%d.mp4"%(k, m_length[k]))
 
-            plot_3d_motion(ik_save_path, kinematic_chain, ik_joint, title=print_captions, fps=20)
-            plot_3d_motion(save_path, kinematic_chain, joint, title=print_captions, fps=20)
-            plot_3d_motion(source_save_path, kinematic_chain, soucre_joint, title='None', fps=20)
+            plot_3d_motion(ik_save_path, kinematic_chain, ik_joint, title=print_captions, fps=30)
+            plot_3d_motion(save_path, kinematic_chain, joint, title=print_captions, fps=30)
+            plot_3d_motion(source_save_path, kinematic_chain, soucre_joint, title='None', fps=30)
             np.save(pjoin(joint_path, "sample%d_repeat%d_len%d.npy"%(k, r, m_length[k])), joint)
             np.save(pjoin(joint_path, "sample%d_repeat%d_len%d_ik.npy"%(k, r, m_length[k])), ik_joint)

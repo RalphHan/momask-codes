@@ -22,7 +22,7 @@ class BaseOptions():
         self.parser.add_argument('--ff_size', type=int, default=1024, help='FF_Size')
         self.parser.add_argument('--dropout', type=float, default=0.2, help='Dropout ratio in transformer')
 
-        self.parser.add_argument("--max_motion_length", type=int, default=196, help="Max length of motion")
+        self.parser.add_argument("--max_motion_length", type=int, default=294, help="Max length of motion")
         self.parser.add_argument("--unit_length", type=int, default=4, help="Downscale ratio of VQ")
 
         self.parser.add_argument('--force_mask', action="store_true", help='True: mask out conditions')

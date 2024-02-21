@@ -255,7 +255,7 @@ if __name__ == '__main__':
             save_path = pjoin(animation_path, "sample%d_repeat%d_len%d.mp4"%(k, r, m_length[k]))
             ik_save_path = pjoin(animation_path, "sample%d_repeat%d_len%d_ik.mp4"%(k, r, m_length[k]))
 
-            plot_3d_motion(ik_save_path, kinematic_chain, ik_joint, title=caption, fps=20)
-            plot_3d_motion(save_path, kinematic_chain, joint, title=caption, fps=20)
+            plot_3d_motion(ik_save_path, kinematic_chain, ik_joint, title=caption, fps=30)
+            plot_3d_motion(save_path, kinematic_chain, joint, title=caption, fps=30)
             np.save(pjoin(joint_path, "sample%d_repeat%d_len%d.npy"%(k, r, m_length[k])), joint)
             np.save(pjoin(joint_path, "sample%d_repeat%d_len%d_ik.npy"%(k, r, m_length[k])), ik_joint)

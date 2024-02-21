@@ -55,26 +55,12 @@ def get_opt(opt_path, device, **kwargs):
     opt.model_dir = pjoin(opt.save_root, 'model')
     opt.meta_dir = pjoin(opt.save_root, 'meta')
 
-    if opt.dataset_name == 't2m':
-        opt.data_root = './dataset/HumanML3D/'
-        opt.motion_dir = pjoin(opt.data_root, 'new_joint_vecs')
-        opt.text_dir = pjoin(opt.data_root, 'texts')
-        opt.joints_num = 22
-        opt.dim_pose = 263
-        opt.max_motion_length = 196
-        opt.max_motion_frame = 196
-        opt.max_motion_token = 55
-    elif opt.dataset_name == 'kit':
-        opt.data_root = './dataset/KIT-ML/'
-        opt.motion_dir = pjoin(opt.data_root, 'new_joint_vecs')
-        opt.text_dir = pjoin(opt.data_root, 'texts')
-        opt.joints_num = 21
-        opt.dim_pose = 251
-        opt.max_motion_length = 196
-        opt.max_motion_frame = 196
-        opt.max_motion_token = 55
-    else:
-        raise KeyError('Dataset not recognized')
+    opt.data_root = './dataset/mootion/'
+    opt.joints_num = 24
+    opt.dim_pose = 3+24*6
+    opt.max_motion_length = 294
+    opt.max_motion_frame = 294
+    opt.max_motion_token = 83
     if not hasattr(opt, 'unit_length'):
         opt.unit_length = 4
     opt.dim_word = 300

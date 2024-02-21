@@ -11,9 +11,9 @@ class TrainT2MOptions(BaseOptions):
         '''LR scheduler'''
         self.parser.add_argument('--lr', type=float, default=2e-4, help='Learning rate')
         self.parser.add_argument('--gamma', type=float, default=0.1, help='Learning rate schedule factor')
-        self.parser.add_argument('--milestones', default=[50_000], nargs="+", type=int,
+        self.parser.add_argument('--milestones', default=[8*50_000], nargs="+", type=int,
                             help="learning rate schedule (iterations)")
-        self.parser.add_argument('--warm_up_iter', default=2000, type=int, help='number of total iterations for warmup')
+        self.parser.add_argument('--warm_up_iter', default=8*2000, type=int, help='number of total iterations for warmup')
 
         '''Condition'''
         self.parser.add_argument('--cond_drop_prob', type=float, default=0.1, help='Drop ratio of condition, for classifier-free guidance')

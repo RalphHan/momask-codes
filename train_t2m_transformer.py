@@ -29,31 +29,33 @@ def plot_t2m(data, save_dir, captions, m_lengths):
     for i, (caption, joint_data) in enumerate(zip(captions, data)):
         joint_data = joint_data[:m_lengths[i]]
         joint = recover_from_ric(torch.from_numpy(joint_data).float(), opt.joints_num).numpy()
-        save_path = pjoin(save_dir, '%02d.mp4'%i)
+        save_path = pjoin(save_dir, '%02d.mp4' % i)
         # print(joint.shape)
-        plot_3d_motion(save_path, kinematic_chain, joint, title=caption, fps=20)
+        plot_3d_motion(save_path, kinematic_chain, joint, title=caption, fps=30)
+
 
 def load_vq_model():
     opt_path = pjoin(opt.checkpoints_dir, opt.dataset_name, opt.vq_name, 'opt.txt')
     vq_opt = get_opt(opt_path, opt.device)
     vq_model = RVQVAE(vq_opt,
-                dim_pose,
-                vq_opt.nb_code,
-                vq_opt.code_dim,
-                vq_opt.output_emb_width,
-                vq_opt.down_t,
-                vq_opt.stride_t,
-                vq_opt.width,
-                vq_opt.depth,
-                vq_opt.dilation_growth_rate,
-                vq_opt.vq_act,
-                vq_opt.vq_norm)
+                      dim_pose,
+                      vq_opt.nb_code,
+                      vq_opt.code_dim,
+                      vq_opt.output_emb_width,
+                      vq_opt.down_t,
+                      vq_opt.stride_t,
+                      vq_opt.width,
+                      vq_opt.depth,
+                      vq_opt.dilation_growth_rate,
+                      vq_opt.vq_act,
+                      vq_opt.vq_norm)
     ckpt = torch.load(pjoin(vq_opt.checkpoints_dir, vq_opt.dataset_name, vq_opt.name, 'model', 'net_best_fid.tar'),
-                            map_location='cpu')
+                      map_location='cpu')
     model_key = 'vq_model' if 'vq_model' in ckpt else 'net'
     vq_model.load_state_dict(ckpt[model_key])
     print(f'Loading VQ Model {opt.vq_name}')
     return vq_model, vq_opt
+
 
 if __name__ == '__main__':
     parser = TrainT2MOptions()
@@ -74,32 +76,14 @@ if __name__ == '__main__':
     os.makedirs(opt.eval_dir, exist_ok=True)
     os.makedirs(opt.log_dir, exist_ok=True)
 
-    if opt.dataset_name == 't2m':
-        opt.data_root = './dataset/HumanML3D'
-        opt.motion_dir = pjoin(opt.data_root, 'new_joint_vecs')
-        opt.joints_num = 22
-        opt.max_motion_len = 55
-        dim_pose = 263
-        radius = 4
-        fps = 20
-        kinematic_chain = t2m_kinematic_chain
-        dataset_opt_path = './checkpoints/t2m/Comp_v6_KLD005/opt.txt'
-
-    elif opt.dataset_name == 'kit': #TODO
-        opt.data_root = './dataset/KIT-ML'
-        opt.motion_dir = pjoin(opt.data_root, 'new_joint_vecs')
-        opt.joints_num = 21
-        radius = 240 * 8
-        fps = 12.5
-        dim_pose = 251
-        opt.max_motion_len = 55
-        kinematic_chain = kit_kinematic_chain
-        dataset_opt_path = './checkpoints/kit/Comp_v6_KLD005/opt.txt'
-
-    else:
-        raise KeyError('Dataset Does Not Exist')
-
-    opt.text_dir = pjoin(opt.data_root, 'texts')
+    opt.data_root = './dataset/mootion/'
+    opt.joints_num = 24
+    opt.max_motion_len = 83
+    dim_pose = 3 + 24 * 6
+    radius = 4
+    fps = 30
+    kinematic_chain = t2m_kinematic_chain
+    dataset_opt_path = './checkpoints/t2m/Comp_v6_KLD005/opt.txt'
 
     vq_model, vq_opt = load_vq_model()
 

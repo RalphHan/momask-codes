@@ -7,7 +7,7 @@ from models.vq.residual_vq import ResidualVQ
 class RVQVAE(nn.Module):
     def __init__(self,
                  args,
-                 input_width=263,
+                 input_width=3+24*6,
                  nb_code=1024,
                  code_dim=512,
                  output_emb_width=512,
