@@ -11,8 +11,10 @@ from models.mask_transformer.tools import *
 
 from einops import rearrange, repeat
 
+
 def def_value():
     return 0.0
+
 
 class MaskTransformerTrainer:
     def __init__(self, args, t2m_transformer, vq_model):
@@ -25,7 +27,6 @@ class MaskTransformerTrainer:
         if args.is_train:
             self.logger = SummaryWriter(args.log_dir)
 
-
     def update_lr_warm_up(self, nb_iter, warm_up_iter, lr):
 
         current_lr = lr * (nb_iter + 1) / (warm_up_iter + 1)
@@ -33,7 +34,6 @@ class MaskTransformerTrainer:
             param_group["lr"] = current_lr
 
         return current_lr
-
 
     def forward(self, batch_data):
 
@@ -73,7 +73,7 @@ class MaskTransformerTrainer:
         state = {
             't2m_transformer': t2m_trans_state_dict,
             'opt_t2m_transformer': self.opt_t2m_transformer.state_dict(),
-            'scheduler':self.scheduler.state_dict(),
+            'scheduler': self.scheduler.state_dict(),
             'ep': ep,
             'total_it': total_it,
         }
@@ -81,23 +81,25 @@ class MaskTransformerTrainer:
 
     def resume(self, model_dir):
         checkpoint = torch.load(model_dir, map_location=self.device)
-        missing_keys, unexpected_keys = self.t2m_transformer.load_state_dict(checkpoint['t2m_transformer'], strict=False)
+        missing_keys, unexpected_keys = self.t2m_transformer.load_state_dict(checkpoint['t2m_transformer'],
+                                                                             strict=False)
         assert len(unexpected_keys) == 0
         assert all([k.startswith('clip_model.') for k in missing_keys])
 
         try:
-            self.opt_t2m_transformer.load_state_dict(checkpoint['opt_t2m_transformer']) # Optimizer
+            self.opt_t2m_transformer.load_state_dict(checkpoint['opt_t2m_transformer'])  # Optimizer
 
-            self.scheduler.load_state_dict(checkpoint['scheduler']) # Scheduler
+            self.scheduler.load_state_dict(checkpoint['scheduler'])  # Scheduler
         except:
             print('Resume wo optimizer')
         return checkpoint['ep'], checkpoint['total_it']
 
-    def train(self, train_loader, val_loader, eval_val_loader, eval_wrapper, plot_eval):
+    def train(self, train_loader, val_loader, plot_eval):
         self.t2m_transformer.to(self.device)
         self.vq_model.to(self.device)
 
-        self.opt_t2m_transformer = optim.AdamW(self.t2m_transformer.parameters(), betas=(0.9, 0.99), lr=self.opt.lr, weight_decay=1e-5)
+        self.opt_t2m_transformer = optim.AdamW(self.t2m_transformer.parameters(), betas=(0.9, 0.99), lr=self.opt.lr,
+                                               weight_decay=1e-5)
         self.scheduler = optim.lr_scheduler.MultiStepLR(self.opt_t2m_transformer,
                                                         milestones=self.opt.milestones,
                                                         gamma=self.opt.gamma)
@@ -108,7 +110,7 @@ class MaskTransformerTrainer:
         if self.opt.is_continue:
             model_dir = pjoin(self.opt.model_dir, 'latest.tar')  # TODO
             epoch, it = self.resume(model_dir)
-            print("Load model epoch:%d iterations:%d"%(epoch, it))
+            print("Load model epoch:%d iterations:%d" % (epoch, it))
 
         start_time = time.time()
         total_iters = self.opt.max_epoch * len(train_loader)
@@ -116,13 +118,6 @@ class MaskTransformerTrainer:
         print('Iters Per Epoch, Training: %04d, Validation: %03d' % (len(train_loader), len(val_loader)))
         logs = defaultdict(def_value, OrderedDict())
 
-        best_fid, best_div, best_top1, best_top2, best_top3, best_matching, writer = evaluation_mask_transformer(
-            self.opt.save_root, eval_val_loader, self.t2m_transformer, self.vq_model, self.logger, epoch,
-            best_fid=100, best_div=100,
-            best_top1=0, best_top2=0, best_top3=0,
-            best_matching=100, eval_wrapper=eval_wrapper,
-            plot_func=plot_eval, save_ckpt=False, save_anim=False
-        )
         best_acc = 0.
 
         while epoch < self.opt.max_epoch:
@@ -144,7 +139,7 @@ class MaskTransformerTrainer:
                     # self.logger.add_scalar('val_loss', val_loss, it)
                     # self.l
                     for tag, value in logs.items():
-                        self.logger.add_scalar('Train/%s'%tag, value / self.opt.log_every, it)
+                        self.logger.add_scalar('Train/%s' % tag, value / self.opt.log_every, it)
                         mean_loss[tag] = value / self.opt.log_every
                     logs = defaultdict(def_value, OrderedDict())
                     print_current_loss(start_time, it, total_iters, mean_loss, epoch=epoch, inner_iter=i)
@@ -177,13 +172,6 @@ class MaskTransformerTrainer:
                 self.save(pjoin(self.opt.model_dir, 'net_best_acc.tar'), epoch, it)
                 best_acc = np.mean(val_acc)
 
-            best_fid, best_div, best_top1, best_top2, best_top3, best_matching, writer = evaluation_mask_transformer(
-                self.opt.save_root, eval_val_loader, self.t2m_transformer, self.vq_model, self.logger, epoch, best_fid=best_fid,
-                best_div=best_div, best_top1=best_top1, best_top2=best_top2, best_top3=best_top3,
-                best_matching=best_matching, eval_wrapper=eval_wrapper,
-                plot_func=plot_eval, save_ckpt=True, save_anim=(epoch%self.opt.eval_every_e==0)
-            )
-
 
 class ResidualTransformerTrainer:
     def __init__(self, args, res_transformer, vq_model):
@@ -197,7 +185,6 @@ class ResidualTransformerTrainer:
             self.logger = SummaryWriter(args.log_dir)
             # self.l1_criterion = torch.nn.SmoothL1Loss()
 
-
     def update_lr_warm_up(self, nb_iter, warm_up_iter, lr):
 
         current_lr = lr * (nb_iter + 1) / (warm_up_iter + 1)
@@ -205,7 +192,6 @@ class ResidualTransformerTrainer:
             param_group["lr"] = current_lr
 
         return current_lr
-
 
     def forward(self, batch_data):
 
@@ -241,7 +227,7 @@ class ResidualTransformerTrainer:
         state = {
             'res_transformer': res_trans_state_dict,
             'opt_res_transformer': self.opt_res_transformer.state_dict(),
-            'scheduler':self.scheduler.state_dict(),
+            'scheduler': self.scheduler.state_dict(),
             'ep': ep,
             'total_it': total_it,
         }
@@ -249,23 +235,25 @@ class ResidualTransformerTrainer:
 
     def resume(self, model_dir):
         checkpoint = torch.load(model_dir, map_location=self.device)
-        missing_keys, unexpected_keys = self.res_transformer.load_state_dict(checkpoint['res_transformer'], strict=False)
+        missing_keys, unexpected_keys = self.res_transformer.load_state_dict(checkpoint['res_transformer'],
+                                                                             strict=False)
         assert len(unexpected_keys) == 0
         assert all([k.startswith('clip_model.') for k in missing_keys])
 
         try:
-            self.opt_res_transformer.load_state_dict(checkpoint['opt_res_transformer']) # Optimizer
+            self.opt_res_transformer.load_state_dict(checkpoint['opt_res_transformer'])  # Optimizer
 
-            self.scheduler.load_state_dict(checkpoint['scheduler']) # Scheduler
+            self.scheduler.load_state_dict(checkpoint['scheduler'])  # Scheduler
         except:
             print('Resume wo optimizer')
         return checkpoint['ep'], checkpoint['total_it']
 
-    def train(self, train_loader, val_loader, eval_val_loader, eval_wrapper, plot_eval):
+    def train(self, train_loader, val_loader, plot_eval):
         self.res_transformer.to(self.device)
         self.vq_model.to(self.device)
 
-        self.opt_res_transformer = optim.AdamW(self.res_transformer.parameters(), betas=(0.9, 0.99), lr=self.opt.lr, weight_decay=1e-5)
+        self.opt_res_transformer = optim.AdamW(self.res_transformer.parameters(), betas=(0.9, 0.99), lr=self.opt.lr,
+                                               weight_decay=1e-5)
         self.scheduler = optim.lr_scheduler.MultiStepLR(self.opt_res_transformer,
                                                         milestones=self.opt.milestones,
                                                         gamma=self.opt.gamma)
@@ -276,21 +264,13 @@ class ResidualTransformerTrainer:
         if self.opt.is_continue:
             model_dir = pjoin(self.opt.model_dir, 'latest.tar')  # TODO
             epoch, it = self.resume(model_dir)
-            print("Load model epoch:%d iterations:%d"%(epoch, it))
+            print("Load model epoch:%d iterations:%d" % (epoch, it))
 
         start_time = time.time()
         total_iters = self.opt.max_epoch * len(train_loader)
         print(f'Total Epochs: {self.opt.max_epoch}, Total Iters: {total_iters}')
         print('Iters Per Epoch, Training: %04d, Validation: %03d' % (len(train_loader), len(val_loader)))
         logs = defaultdict(def_value, OrderedDict())
-
-        best_fid, best_div, best_top1, best_top2, best_top3, best_matching, writer = evaluation_res_transformer(
-            self.opt.save_root, eval_val_loader, self.res_transformer, self.vq_model, self.logger, epoch,
-            best_fid=100, best_div=100,
-            best_top1=0, best_top2=0, best_top3=0,
-            best_matching=100, eval_wrapper=eval_wrapper,
-            plot_func=plot_eval, save_ckpt=False, save_anim=False
-        )
         best_loss = 100
         best_acc = 0
 
@@ -313,7 +293,7 @@ class ResidualTransformerTrainer:
                     # self.logger.add_scalar('val_loss', val_loss, it)
                     # self.l
                     for tag, value in logs.items():
-                        self.logger.add_scalar('Train/%s'%tag, value / self.opt.log_every, it)
+                        self.logger.add_scalar('Train/%s' % tag, value / self.opt.log_every, it)
                         mean_loss[tag] = value / self.opt.log_every
                     logs = defaultdict(def_value, OrderedDict())
                     print_current_loss(start_time, it, total_iters, mean_loss, epoch=epoch, inner_iter=i)
@@ -350,10 +330,3 @@ class ResidualTransformerTrainer:
                 print(f"Improved acc from {best_acc:.02f} to {np.mean(val_acc)}!!!")
                 # self.save(pjoin(self.opt.model_dir, 'net_best_loss.tar'), epoch, it)
                 best_acc = np.mean(val_acc)
-
-            best_fid, best_div, best_top1, best_top2, best_top3, best_matching, writer = evaluation_res_transformer(
-                self.opt.save_root, eval_val_loader, self.res_transformer, self.vq_model, self.logger, epoch, best_fid=best_fid,
-                best_div=best_div, best_top1=best_top1, best_top2=best_top2, best_top3=best_top3,
-                best_matching=best_matching, eval_wrapper=eval_wrapper,
-                plot_func=plot_eval, save_ckpt=True, save_anim=(epoch%self.opt.eval_every_e==0)
-            )

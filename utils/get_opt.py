@@ -59,8 +59,6 @@ def get_opt(opt_path, device, **kwargs):
     opt.joints_num = 24
     opt.dim_pose = 3+24*6
     opt.max_motion_length = 294
-    opt.max_motion_frame = 294
-    opt.max_motion_token = 83
     if not hasattr(opt, 'unit_length'):
         opt.unit_length = 4
     opt.dim_word = 300
