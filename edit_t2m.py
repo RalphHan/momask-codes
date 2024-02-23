@@ -78,7 +78,7 @@ if __name__ == '__main__':
     vq_model.to(opt.device)
 
     ##### ---- Data ---- #####
-    max_motion_length = 294
+    max_motion_length = 450
     mean = np.load(pjoin(opt.checkpoints_dir, opt.dataset_name, model_opt.vq_name, 'meta', 'mean.npy'))
     std = np.load(pjoin(opt.checkpoints_dir, opt.dataset_name, model_opt.vq_name, 'meta', 'std.npy'))
     def inv_transform(data):

@@ -1,11 +1,15 @@
 from os.path import join as pjoin
-import torch
 from torch.utils import data
-import numpy as np
 from tqdm import tqdm
 from torch.utils.data._utils.collate import default_collate
 import random
 import codecs as cs
+import json
+import numpy as np
+import binascii
+import re
+import torch
+import utils.rotation_conversions as geometry
 
 
 def collate_fn(batch):
@@ -13,26 +17,68 @@ def collate_fn(batch):
     return default_collate(batch)
 
 
+def mirror_text(text, pattern):
+    def replace(match):
+        word = match.group(0)
+        if word == "left":
+            return "right"
+        elif word == "right":
+            return "left"
+        return word
+
+    return pattern.sub(replace, text)
+
+
+def mirror_motion(rotations, root_positions):
+    rotations, root_positions = rotations.copy(), root_positions.copy()
+    mirror_chain = [0, 2, 1, 3, 5, 4, 6, 8, 7, 9, 11, 10, 12, 14, 13, 15, 17, 16, 19, 18, 21, 20, 23, 22]
+    rotations[:, :, 0] = rotations[:, mirror_chain, 0]
+    rotations[:, :, 1] = -rotations[:, mirror_chain, 1]
+    rotations[:, :, 2] = -rotations[:, mirror_chain, 2]
+    root_positions[:, 0] *= -1
+    return rotations, root_positions
+
+
+def motion_to_147(rotations, root_positions):
+    velocity = root_positions.copy()
+    with torch.no_grad():
+        rotation_6d = geometry.axis_angle_to_rotation_6d(
+            torch.tensor(rotations, dtype=torch.float32)).reshape(-1, 24 * 6).numpy()
+    velocity[1:, [0, 2]] = root_positions[1:, [0, 2]] - root_positions[:-1, [0, 2]]
+    rotations_147 = np.concatenate([velocity, rotation_6d], axis=1, dtype=np.float32)
+    return rotations_147
+
+
 class MotionDataset(data.Dataset):
     def __init__(self, opt, splits):
         self.opt = opt
-        self.data = []
+        self.data_all = []
+        self.data_all_m = []
         self.lengths = []
+
         for name in tqdm(splits):
             try:
-                motion = np.load(pjoin(opt.motion_dir, name + '.npy'))
-                if motion.shape[0] < opt.window_size:
+                with open(opt.data_root + name, encoding='utf-8') as f:
+                    data = json.load(f)
+                rotations = np.frombuffer(binascii.a2b_base64(data["rotations"]),
+                                          dtype=data["dtype"]).reshape(-1, 24, 3)
+                root_positions = np.frombuffer(binascii.a2b_base64(data["root_positions"]),
+                                               dtype=data["dtype"]).reshape(-1, 3)
+                if rotations.shape[0] < opt.window_size:
                     continue
-                self.lengths.append(motion.shape[0] - opt.window_size)
-                self.data.append(motion)
+                rotations_m, root_positions_m = mirror_motion(rotations, root_positions)
+                motion147 = motion_to_147(rotations, root_positions)
+                motion147_m = motion_to_147(rotations_m, root_positions_m)
+                self.lengths.append(rotations.shape[0] - opt.window_size)
+                self.data_all.append(motion147)
+                self.data_all_m.append(motion147_m)
             except Exception as e:
-                # Some motion may not exist in KIT dataset
                 print(e)
                 pass
 
         self.cumsum = np.cumsum([0] + self.lengths)
 
-        print("Total number of motions {}, snippets {}".format(len(self.data), self.cumsum[-1]))
+        print("Total number of motions {}, snippets {}".format(len(self.data_all), self.cumsum[-1]))
 
     def inv_transform(self, data):
         return data
@@ -47,18 +93,17 @@ class MotionDataset(data.Dataset):
         else:
             motion_id = 0
             idx = 0
-        motion = self.data[motion_id][idx:idx + self.opt.window_size]
-
+        table = self.data_all if random.random() > 0.5 else self.data_all_m
+        motion = table[motion_id][idx:idx + self.opt.window_size]
         return motion
 
 
 class Text2MotionDataset(data.Dataset):
     def __init__(self, opt, splits):
         self.opt = opt
-        self.max_length = 20
+        self.max_length = 30
         self.pointer = 0
         self.max_motion_length = opt.max_motion_length
-        min_motion_len = 40 if self.opt.dataset_name == 't2m' else 24
 
         data_dict = {}
 
@@ -67,7 +112,7 @@ class Text2MotionDataset(data.Dataset):
         for name in tqdm(splits):
             try:
                 motion = np.load(pjoin(opt.motion_dir, name + '.npy'))
-                if (len(motion)) < min_motion_len or (len(motion) >= 200):
+                if len(motion) >= 200:
                     continue
                 text_data = []
                 flag = False
@@ -90,7 +135,7 @@ class Text2MotionDataset(data.Dataset):
                             text_data.append(text_dict)
                         else:
                             try:
-                                n_motion = motion[int(f_tag * 20): int(to_tag * 20)]
+                                n_motion = motion[int(f_tag * 30): int(to_tag * 30)]
                                 if (len(n_motion)) < min_motion_len or (len(n_motion) >= 200):
                                     continue
                                 new_name = random.choice('ABCDEFGHIJKLMNOPQRSTUVW') + '_' + name

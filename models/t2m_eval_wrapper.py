@@ -36,10 +36,10 @@ class EvaluatorModelWrapper(object):
             raise KeyError('Dataset not Recognized!!!')
 
         opt.dim_word = 300
-        opt.max_motion_length = 294
+        opt.max_motion_length = 450
         opt.dim_pos_ohot = len(POS_enumerator)
         opt.dim_motion_hidden = 1024
-        opt.max_text_len = 20
+        opt.max_text_len = 30
         opt.dim_text_hidden = 512
         opt.dim_coemb_hidden = 512
 
@@ -128,10 +128,10 @@ class EvaluatorWrapper(object):
             'dataset_name': dataset_name,
             'device': device,
             'dim_word': 300,
-            'max_motion_length': 294,
+            'max_motion_length': 450,
             'dim_pos_ohot': len(POS_enumerator),
             'dim_motion_hidden': 1024,
-            'max_text_len': 20,
+            'max_text_len': 30,
             'dim_text_hidden': 512,
             'dim_coemb_hidden': 512,
             'dim_pose': 263 if dataset_name == 'humanml' else 251,

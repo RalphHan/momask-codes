@@ -11,7 +11,6 @@ from options.vq_option import arg_parse
 from data.t2m_dataset import MotionDataset
 from utils.paramUtil import t2m_kinematic_chain
 
-from utils.motion_process import recover_from_ric
 from utils.plot_script import plot_3d_motion
 
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -19,9 +18,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 def plot_t2m(data, save_dir):
     data = train_dataset.inv_transform(data)
-    for i in range(len(data)):
-        joint_data = data[i]
-        joint = recover_from_ric(torch.from_numpy(joint_data).float(), opt.joints_num).numpy()
+    for i, joint in enumerate(data):
         save_path = pjoin(save_dir, '%02d.mp4' % (i))
         plot_3d_motion(save_path, t2m_kinematic_chain, joint, title="None", fps=fps, radius=radius)
 

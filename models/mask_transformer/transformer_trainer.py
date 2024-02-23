@@ -94,7 +94,7 @@ class MaskTransformerTrainer:
             print('Resume wo optimizer')
         return checkpoint['ep'], checkpoint['total_it']
 
-    def train(self, train_loader, val_loader, plot_eval):
+    def train(self, train_loader, val_loader):
         self.t2m_transformer.to(self.device)
         self.vq_model.to(self.device)
 
@@ -248,7 +248,7 @@ class ResidualTransformerTrainer:
             print('Resume wo optimizer')
         return checkpoint['ep'], checkpoint['total_it']
 
-    def train(self, train_loader, val_loader, plot_eval):
+    def train(self, train_loader, val_loader):
         self.res_transformer.to(self.device)
         self.vq_model.to(self.device)
 

@@ -44,7 +44,7 @@ class TrainLenEstOptions():
         self.parser.add_argument('--batch_size', type=int, default=64, help='Batch size')
 
         self.parser.add_argument("--unit_length", type=int, default=4, help="Length of motion")
-        self.parser.add_argument("--max_text_len", type=int, default=20, help="Length of motion")
+        self.parser.add_argument("--max_text_len", type=int, default=30, help="Length of motion")
 
         self.parser.add_argument('--max_epoch', type=int, default=300, help='Training iterations')
 

@@ -5,7 +5,7 @@ from torch.utils.tensorboard import SummaryWriter
 from os.path import join as pjoin
 import torch.nn.functional as F
 import utils.rotation_conversions as geometry
-from smplx import SMPL
+from utils.my_smpl import MySMPL
 
 import torch.optim as optim
 
@@ -28,7 +28,7 @@ class RVQTokenizerTrainer:
         self.opt = args
         self.vq_model = vq_model
         self.device = args.device
-        self.smpl = SMPL("smpl", gender="neutral", ext="pkl").to(self.device)
+        self.smpl = MySMPL("checkpoints/smpl", gender="neutral", ext="pkl").to(self.device)
 
         if args.is_train:
             self.logger = SummaryWriter(args.log_dir)
@@ -47,26 +47,32 @@ class RVQTokenizerTrainer:
         loss_rec = self.l1_criterion(pred_motion, motions)
 
         # velocity loss
-        target_v = motions[:, 1:] - motions[:, :-1]
         model_out_v = pred_motion[:, 1:] - pred_motion[:, :-1]
+        model_out_v[:, :, [0, 2]] = pred_motion[:, 1:, [0, 2]]
+        target_v = motions[:, 1:] - motions[:, :-1]
+        target_v[:, :, [0, 2]] = motions[:, 1:, [0, 2]]
         loss_v = self.l1_criterion(model_out_v, target_v)
 
         # FK loss
         b, s, c = pred_motion.shape
-        model_x = pred_motion[:, :, :3].reshape(b * s, -1)
-        model_q = geometry.rotation_6d_to_axis_angle(pred_motion[:, :, 3:].reshape(b, s, -1, 6)).reshape(b * s, -1)
-        target_x = motions[:, :, :3].reshape(b * s, -1)
-        target_q = geometry.rotation_6d_to_axis_angle(motions[:, :, 3:].reshape(b, s, -1, 6)).reshape(b * s, -1)
 
-        # perform FK
+        model_x = pred_motion[:, :, :3].clone()
+        model_x[:, :, [0, 2]] = torch.cumsum(model_x[:, :, [0, 2]], dim=1)
+        model_x = model_x.reshape(b * s, -1)
+        model_q = geometry.rotation_6d_to_axis_angle(pred_motion[:, :, 3:].reshape(b, s, -1, 6)).reshape(b * s, -1)
+
+        target_x = motions[:, :, :3].clone()
+        target_x[:, :, [0, 2]] = torch.cumsum(target_x[:, :, [0, 2]], dim=1)
+        target_x = target_x.reshape(b * s, -1)
+        target_q = geometry.rotation_6d_to_axis_angle(motions[:, :, 3:].reshape(b, s, -1, 6)).reshape(b * s, -1)
 
         model_xp = self.smpl(global_orient=model_q[:, :3], body_pose=model_q[:, 3:], transl=model_x)
         target_xp = self.smpl(global_orient=target_q[:, :3], body_pose=target_q[:, 3:], transl=target_x)
 
         loss_explicit = self.l1_criterion(model_xp, target_xp)
 
-        self.motions = motions
-        self.pred_motion = pred_motion
+        self.motions = motions[:, :22].reshape(b, s, 22, 3)
+        self.pred_motion = pred_motion[:, :22].reshape(b, s, 22, 3)
 
         loss = 0.636 * loss_rec + 2.964 * loss_v + 0.646 * loss_explicit + 0.02 * loss_commit
 
@@ -145,8 +151,6 @@ class RVQTokenizerTrainer:
 
                 if it % self.opt.log_every == 0:
                     mean_loss = OrderedDict()
-                    # self.logger.add_scalar('val_loss', val_loss, it)
-                    # self.l
                     for tag, value in logs.items():
                         self.logger.add_scalar('Train/%s' % tag, value / self.opt.log_every, it)
                         mean_loss[tag] = value / self.opt.log_every

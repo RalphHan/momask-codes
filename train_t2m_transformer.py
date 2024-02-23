@@ -11,23 +11,10 @@ from models.vq.model import RVQVAE
 
 from options.train_option import TrainT2MOptions
 
-from utils.plot_script import plot_3d_motion
-from utils.motion_process import recover_from_ric
 from utils.get_opt import get_opt
 from utils.fixseed import fixseed
-from utils.paramUtil import t2m_kinematic_chain
 
 from data.t2m_dataset import Text2MotionDataset
-
-
-def plot_t2m(data, save_dir, captions, m_lengths):
-    data = train_dataset.inv_transform(data)
-
-    for i, (caption, joint_data) in enumerate(zip(captions, data)):
-        joint_data = joint_data[:m_lengths[i]]
-        joint = recover_from_ric(torch.from_numpy(joint_data).float(), opt.joints_num).numpy()
-        save_path = pjoin(save_dir, '%02d.mp4' % i)
-        plot_3d_motion(save_path, t2m_kinematic_chain, joint, title=caption, fps=30)
 
 
 def load_vq_model():
@@ -115,4 +102,4 @@ if __name__ == '__main__':
 
     trainer = MaskTransformerTrainer(opt, t2m_transformer, vq_model)
 
-    trainer.train(train_loader, val_loader, plot_eval=plot_t2m)
+    trainer.train(train_loader, val_loader)
