@@ -66,8 +66,8 @@ class RVQTokenizerTrainer:
         target_x = target_x.reshape(b * s, -1)
         target_q = geometry.rotation_6d_to_axis_angle(motions[:, :, 3:].reshape(b, s, -1, 6)).reshape(b * s, -1)
 
-        model_xp = self.smpl(global_orient=model_q[:, :3], body_pose=model_q[:, 3:], transl=model_x)
-        target_xp = self.smpl(global_orient=target_q[:, :3], body_pose=target_q[:, 3:], transl=target_x)
+        model_xp = self.smpl(global_orient=model_q[:, :3], body_pose=model_q[:, 3:], transl=model_x).joints
+        target_xp = self.smpl(global_orient=target_q[:, :3], body_pose=target_q[:, 3:], transl=target_x).joints
 
         loss_explicit = self.l1_criterion(model_xp, target_xp)
 
