@@ -6,6 +6,7 @@ from os.path import join as pjoin
 import torch.nn.functional as F
 import utils.rotation_conversions as geometry
 from utils.my_smpl import MySMPL
+import shutil
 
 import torch.optim as optim
 
@@ -71,8 +72,8 @@ class RVQTokenizerTrainer:
 
         loss_explicit = self.l1_criterion(model_xp, target_xp)
 
-        self.motions = motions[:, :22].reshape(b, s, 22, 3)
-        self.pred_motion = pred_motion[:, :22].reshape(b, s, 22, 3)
+        self.motions = target_xp[:, :22].reshape(b, s, 22, 3)
+        self.pred_motion = model_xp[:, :22].reshape(b, s, 22, 3)
 
         loss = 0.636 * loss_rec + 2.964 * loss_v + 0.646 * loss_explicit + 0.02 * loss_commit
 
@@ -122,13 +123,12 @@ class RVQTokenizerTrainer:
         start_time = time.time()
         total_iters = self.opt.max_epoch * len(train_loader)
         print(f'Total Epochs: {self.opt.max_epoch}, Total Iters: {total_iters}')
-        print('Iters Per Epoch, Training: %04d, Validation: %03d' % (len(train_loader), len(eval_val_loader)))
+        print('Iters Per Epoch, Training: %04d, Validation: %03d' % (len(train_loader), len(val_loader)))
 
         current_lr = self.opt.lr
         logs = defaultdict(def_value, OrderedDict())
-
+        self.vq_model.train()
         while epoch < self.opt.max_epoch:
-            self.vq_model.train()
             for i, batch_data in enumerate(train_loader):
                 it += 1
                 if it < self.opt.warm_up_iter:
@@ -159,45 +159,46 @@ class RVQTokenizerTrainer:
 
                 if it % self.opt.save_latest == 0:
                     self.save(pjoin(self.opt.model_dir, 'latest.tar'), epoch, it)
+                    shutil.copyfile(pjoin(self.opt.model_dir, 'latest.tar'),
+                                    pjoin(self.opt.model_dir, 'E%02dI%07d.tar' % (epoch, it)))
 
-            self.save(pjoin(self.opt.model_dir, 'latest.tar'), epoch, it)
+                    print('Validation time:')
+                    self.vq_model.eval()
+                    val_loss_rec = []
+                    val_loss_v = []
+                    val_loss_explicit = []
+                    val_loss_commit = []
+                    val_loss = []
+                    val_perpexity = []
+                    with torch.no_grad():
+                        for i, batch_data in enumerate(val_loader):
+                            loss, loss_rec, loss_v, loss_explicit, loss_commit, perplexity = self.forward(batch_data)
+                            val_loss.append(loss.item())
+                            val_loss_rec.append(loss_rec.item())
+                            val_loss_v.append(loss_v.item())
+                            val_loss_explicit.append(loss_explicit.item())
+                            val_loss_commit.append(loss_commit.item())
+                            val_perpexity.append(perplexity.item())
+
+                    self.logger.add_scalar('Val/loss', sum(val_loss) / len(val_loss), it)
+                    self.logger.add_scalar('Val/loss_rec', sum(val_loss_rec) / len(val_loss_rec), it)
+                    self.logger.add_scalar('Val/loss_v', sum(val_loss_v) / len(val_loss_v), it)
+                    self.logger.add_scalar('Val/loss_explicit', sum(val_loss_explicit) / len(val_loss_explicit), it)
+                    self.logger.add_scalar('Val/loss_commit', sum(val_loss_commit) / len(val_loss), it)
+                    self.logger.add_scalar('Val/loss_perplexity', sum(val_perpexity) / len(val_loss_rec), it)
+
+                    print('Validation Loss: %.5f Reconstruction: %.5f, Velocity: %.5f, Explicit: %.5f, Commit: %.5f' %
+                          (sum(val_loss) / len(val_loss), sum(val_loss_rec) / len(val_loss),
+                           sum(val_loss_v) / len(val_loss), sum(val_loss_explicit) / len(val_loss),
+                           sum(val_loss_commit) / len(val_loss)))
+
+                    data = torch.cat([self.motions[:4], self.pred_motion[:4]], dim=0).detach().cpu().numpy()
+                    save_dir = pjoin(self.opt.eval_dir, 'E%02dI%07d' % (epoch, it))
+                    os.makedirs(save_dir, exist_ok=True)
+                    plot_eval(data, save_dir)
+                    self.vq_model.train()
 
             epoch += 1
-            print('Validation time:')
-            self.vq_model.eval()
-            val_loss_rec = []
-            val_loss_v = []
-            val_loss_explicit = []
-            val_loss_commit = []
-            val_loss = []
-            val_perpexity = []
-            with torch.no_grad():
-                for i, batch_data in enumerate(val_loader):
-                    loss, loss_rec, loss_v, loss_explicit, loss_commit, perplexity = self.forward(batch_data)
-                    val_loss.append(loss.item())
-                    val_loss_rec.append(loss_rec.item())
-                    val_loss_v.append(loss_v.item())
-                    val_loss_explicit.append(loss_explicit.item())
-                    val_loss_commit.append(loss_commit.item())
-                    val_perpexity.append(perplexity.item())
-
-            self.logger.add_scalar('Val/loss', sum(val_loss) / len(val_loss), epoch)
-            self.logger.add_scalar('Val/loss_rec', sum(val_loss_rec) / len(val_loss_rec), epoch)
-            self.logger.add_scalar('Val/loss_v', sum(val_loss_v) / len(val_loss_v), epoch)
-            self.logger.add_scalar('Val/loss_explicit', sum(val_loss_explicit) / len(val_loss_explicit), epoch)
-            self.logger.add_scalar('Val/loss_commit', sum(val_loss_commit) / len(val_loss), epoch)
-            self.logger.add_scalar('Val/loss_perplexity', sum(val_perpexity) / len(val_loss_rec), epoch)
-
-            print('Validation Loss: %.5f Reconstruction: %.5f, Velocity: %.5f, Explicit: %.5f, Commit: %.5f' %
-                  (sum(val_loss) / len(val_loss), sum(val_loss_rec) / len(val_loss),
-                   sum(val_loss_v) / len(val_loss), sum(val_loss_explicit) / len(val_loss),
-                   sum(val_loss_commit) / len(val_loss)))
-
-            if epoch % self.opt.eval_every_e == 0:
-                data = torch.cat([self.motions[:4], self.pred_motion[:4]], dim=0).detach().cpu().numpy()
-                save_dir = pjoin(self.opt.eval_dir, 'E%04d' % (epoch))
-                os.makedirs(save_dir, exist_ok=True)
-                plot_eval(data, save_dir)
 
 
 class LengthEstTrainer(object):

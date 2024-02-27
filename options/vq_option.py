@@ -6,7 +6,7 @@ def arg_parse(is_train=False):
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     ## dataloader
-    # parser.add_argument('--dataset_name', type=str, default='humanml3d', help='dataset directory')
+    parser.add_argument('--dataset_name', type=str, default='t2m', help='dataset directory')
     parser.add_argument('--batch_size', default=256, type=int, help='batch size')
     parser.add_argument('--window_size', type=int, default=64, help='training motion length')
     parser.add_argument("--gpu_id", type=int, default=0, help='GPU id')
@@ -38,7 +38,7 @@ def arg_parse(is_train=False):
                         help='dataset directory')
     parser.add_argument('--vq_norm', type=str, default=None, help='dataset directory')
 
-    parser.add_argument('--num_quantizers', type=int, default=3, help='num_quantizers')
+    parser.add_argument('--num_quantizers', type=int, default=6, help='num_quantizers')
     parser.add_argument('--shared_codebook', action="store_true")
     parser.add_argument('--quantize_dropout_prob', type=float, default=0.2, help='quantize_dropout_prob')
     # parser.add_argument('--use_vq_prob', type=float, default=0.8, help='quantize_dropout_prob')
@@ -51,7 +51,7 @@ def arg_parse(is_train=False):
     parser.add_argument('--is_continue', action="store_true", help='Name of this trial')
     parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
     parser.add_argument('--log_every', default=10, type=int, help='iter log frequency')
-    parser.add_argument('--save_latest', default=500, type=int, help='iter save latest model frequency')
+    parser.add_argument('--save_latest', default=10000, type=int, help='iter save latest model frequency')
     parser.add_argument('--save_every_e', default=2, type=int, help='save model every n epoch')
     parser.add_argument('--eval_every_e', default=1, type=int, help='save eval results every n epoch')
     # parser.add_argument('--early_stop_e', default=5, type=int, help='early stopping epoch')

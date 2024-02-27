@@ -9,7 +9,9 @@ import numpy as np
 import binascii
 import re
 import torch
+import os
 import utils.rotation_conversions as geometry
+import pickle as pk
 
 
 def collate_fn(batch):
@@ -45,40 +47,36 @@ def motion_to_147(rotations, root_positions):
         rotation_6d = geometry.axis_angle_to_rotation_6d(
             torch.tensor(rotations, dtype=torch.float32)).reshape(-1, 24 * 6).numpy()
     velocity[1:, [0, 2]] = root_positions[1:, [0, 2]] - root_positions[:-1, [0, 2]]
+    velocity[0, [0, 2]] = 0
     rotations_147 = np.concatenate([velocity, rotation_6d], axis=1, dtype=np.float32)
     return rotations_147
 
 
 class MotionDataset(data.Dataset):
-    def __init__(self, opt, splits):
+    def __init__(self, opt, splits, cache_file):
         self.opt = opt
-        self.data_all = []
-        self.data_all_m = []
-        self.lengths = []
-
-        for name in tqdm(splits):
-            try:
+        self.splits = np.array(splits, dtype=object)
+        if os.path.exists(cache_file):
+            with open(cache_file, "rb") as f:
+                data = pk.load(f)
+            self.cumsum = data["cumsum"]
+            self.lengths = data["lengths"]
+        else:
+            self.lengths = []
+            for name in tqdm(splits):
                 with open(opt.data_root + name, encoding='utf-8') as f:
                     data = json.load(f)
-                rotations = np.frombuffer(binascii.a2b_base64(data["rotations"]),
-                                          dtype=data["dtype"]).reshape(-1, 24, 3)
-                root_positions = np.frombuffer(binascii.a2b_base64(data["root_positions"]),
-                                               dtype=data["dtype"]).reshape(-1, 3)
-                if rotations.shape[0] < opt.window_size:
-                    continue
-                rotations_m, root_positions_m = mirror_motion(rotations, root_positions)
-                motion147 = motion_to_147(rotations, root_positions)
-                motion147_m = motion_to_147(rotations_m, root_positions_m)
-                self.lengths.append(rotations.shape[0] - opt.window_size)
-                self.data_all.append(motion147)
-                self.data_all_m.append(motion147_m)
-            except Exception as e:
-                print(e)
-                pass
+                self.lengths.append(data["n_frames"] - opt.window_size)
 
-        self.cumsum = np.cumsum([0] + self.lengths)
+            self.cumsum = np.cumsum([0] + self.lengths)
+            self.lengths = np.int32(self.lengths)
 
-        print("Total number of motions {}, snippets {}".format(len(self.data_all), self.cumsum[-1]))
+            with open(cache_file, "wb") as f:
+                pk.dump({
+                    "cumsum": self.cumsum,
+                    "lengths": self.lengths}, f)
+
+        print("Total number of motions {}, snippets {}".format(len(self.lengths), self.cumsum[-1]))
 
     def inv_transform(self, data):
         return data
@@ -93,9 +91,16 @@ class MotionDataset(data.Dataset):
         else:
             motion_id = 0
             idx = 0
-        table = self.data_all if random.random() > 0.5 else self.data_all_m
-        motion = table[motion_id][idx:idx + self.opt.window_size]
-        return motion
+        with open(self.opt.data_root + self.splits[motion_id], encoding='utf-8') as f:
+            data = json.load(f)
+        rotations = np.frombuffer(binascii.a2b_base64(data["rotations"]),
+                                  dtype=data["dtype"]).reshape(-1, 24, 3)[idx:idx + self.opt.window_size]
+        root_positions = np.frombuffer(binascii.a2b_base64(data["root_positions"]),
+                                       dtype=data["dtype"]).reshape(-1, 3)[idx:idx + self.opt.window_size]
+        if random.random() > 0.5:
+            rotations, root_positions = mirror_motion(rotations, root_positions)
+        motion147 = motion_to_147(rotations, root_positions)
+        return motion147
 
 
 class Text2MotionDataset(data.Dataset):

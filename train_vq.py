@@ -73,8 +73,8 @@ if __name__ == "__main__":
 
     trainer = RVQTokenizerTrainer(opt, vq_model=net)
 
-    train_dataset = MotionDataset(opt, train_split)
-    val_dataset = MotionDataset(opt, val_split)
+    train_dataset = MotionDataset(opt, train_split, "./dataset/mootion_train.pk")
+    val_dataset = MotionDataset(opt, val_split, "./dataset/mootion_val.pk")
 
     train_loader = DataLoader(train_dataset, batch_size=opt.batch_size, drop_last=True, num_workers=4,
                               shuffle=True, pin_memory=True)
