@@ -18,6 +18,7 @@ from utils.utils import print_current_loss
 
 import os
 import sys
+import json
 
 
 def def_value():
@@ -88,13 +89,14 @@ class RVQTokenizerTrainer:
 
         return current_lr
 
-    def save(self, file_name, ep, total_it):
+    def save(self, file_name, ep, total_it, val_loss):
         state = {
             "vq_model": self.vq_model.state_dict(),
             "opt_vq_model": self.opt_vq_model.state_dict(),
             "scheduler": self.scheduler.state_dict(),
             'ep': ep,
             'total_it': total_it,
+            'val_loss': val_loss
         }
         torch.save(state, file_name)
 
@@ -104,6 +106,15 @@ class RVQTokenizerTrainer:
         self.opt_vq_model.load_state_dict(checkpoint['opt_vq_model'])
         self.scheduler.load_state_dict(checkpoint['scheduler'])
         return checkpoint['ep'], checkpoint['total_it']
+
+    def update_logs(self, logs, loss, loss_rec, loss_v, loss_explicit, loss_commit, perplexity):
+        logs['loss'] += loss.item()
+        logs['loss_rec'] += loss_rec.item()
+        logs['loss_v'] += loss_v.item()
+        logs['loss_explicit'] += loss_explicit.item()
+        logs['loss_commit'] += loss_commit.item()
+        logs['perplexity'] += perplexity.item()
+        logs['lr'] += self.opt_vq_model.param_groups[0]['lr']
 
     def train(self, train_loader, val_loader, plot_eval=None):
         self.vq_model.to(self.device)
@@ -140,58 +151,38 @@ class RVQTokenizerTrainer:
 
                 if it >= self.opt.warm_up_iter:
                     self.scheduler.step()
-
-                logs['loss'] += loss.item()
-                logs['loss_rec'] += loss_rec.item()
-                logs['loss_v'] += loss_v.item()
-                logs['loss_explicit'] += loss_explicit.item()
-                logs['loss_commit'] += loss_commit.item()
-                logs['perplexity'] += perplexity.item()
-                logs['lr'] += self.opt_vq_model.param_groups[0]['lr']
-
+                self.update_logs(logs, loss, loss_rec, loss_v, loss_explicit, loss_commit, perplexity)
                 if it % self.opt.log_every == 0:
                     mean_loss = OrderedDict()
                     for tag, value in logs.items():
-                        self.logger.add_scalar('Train/%s' % tag, value / self.opt.log_every, it)
                         mean_loss[tag] = value / self.opt.log_every
+                        self.logger.add_scalar('Train/%s' % tag, value / self.opt.log_every, it)
                     logs = defaultdict(def_value, OrderedDict())
                     print_current_loss(start_time, it, total_iters, mean_loss, epoch=epoch, inner_iter=i)
 
                 if it % self.opt.save_latest == 0:
-                    self.save(pjoin(self.opt.model_dir, 'latest.tar'), epoch, it)
-                    shutil.copyfile(pjoin(self.opt.model_dir, 'latest.tar'),
-                                    pjoin(self.opt.model_dir, 'E%02dI%07d.tar' % (epoch, it)))
-
                     print('Validation time:')
                     self.vq_model.eval()
-                    val_loss_rec = []
-                    val_loss_v = []
-                    val_loss_explicit = []
-                    val_loss_commit = []
-                    val_loss = []
-                    val_perpexity = []
+                    val_logs = defaultdict(def_value, OrderedDict())
                     with torch.no_grad():
                         for i, batch_data in enumerate(val_loader):
                             loss, loss_rec, loss_v, loss_explicit, loss_commit, perplexity = self.forward(batch_data)
-                            val_loss.append(loss.item())
-                            val_loss_rec.append(loss_rec.item())
-                            val_loss_v.append(loss_v.item())
-                            val_loss_explicit.append(loss_explicit.item())
-                            val_loss_commit.append(loss_commit.item())
-                            val_perpexity.append(perplexity.item())
+                            self.update_logs(val_logs, loss, loss_rec, loss_v, loss_explicit, loss_commit, perplexity)
+                    val_mean_loss = OrderedDict()
+                    for tag, value in val_logs.items():
+                        val_mean_loss[tag] = value / len(val_loader)
+                        self.logger.add_scalar('Val/%s' % tag, val_mean_loss[tag], it)
 
-                    self.logger.add_scalar('Val/loss', sum(val_loss) / len(val_loss), it)
-                    self.logger.add_scalar('Val/loss_rec', sum(val_loss_rec) / len(val_loss_rec), it)
-                    self.logger.add_scalar('Val/loss_v', sum(val_loss_v) / len(val_loss_v), it)
-                    self.logger.add_scalar('Val/loss_explicit', sum(val_loss_explicit) / len(val_loss_explicit), it)
-                    self.logger.add_scalar('Val/loss_commit', sum(val_loss_commit) / len(val_loss), it)
-                    self.logger.add_scalar('Val/loss_perplexity', sum(val_perpexity) / len(val_loss_rec), it)
-
-                    print('Validation Loss: %.5f Reconstruction: %.5f, Velocity: %.5f, Explicit: %.5f, Commit: %.5f' %
-                          (sum(val_loss) / len(val_loss), sum(val_loss_rec) / len(val_loss),
-                           sum(val_loss_v) / len(val_loss), sum(val_loss_explicit) / len(val_loss),
-                           sum(val_loss_commit) / len(val_loss)))
-
+                    print(
+                        'Validation Loss: %.5f, Reconstruction: %.5f, Velocity: %.5f, Explicit: %.5f, Commit: %.5f, Perplexity: %.5f'
+                        % (val_mean_loss['loss'], val_mean_loss['loss_rec'], val_mean_loss['loss_v'],
+                           val_mean_loss['loss_explicit'],
+                           val_mean_loss['loss_commit'], val_mean_loss['perplexity']))
+                    self.save(pjoin(self.opt.model_dir, 'latest.tar'), epoch, it, val_mean_loss)
+                    shutil.copyfile(pjoin(self.opt.model_dir, 'latest.tar'),
+                                    pjoin(self.opt.model_dir, 'E%02dI%07d.tar' % (epoch, it)))
+                    with open(pjoin(self.opt.model_dir, 'val_loss.jsonl'), "a") as f:
+                        f.write(json.dumps({'E%02dI%07d' % (epoch, it): val_mean_loss}) + "\n")
                     data = torch.cat([self.motions[:4], self.pred_motion[:4]], dim=0).detach().cpu().numpy()
                     save_dir = pjoin(self.opt.eval_dir, 'E%02dI%07d' % (epoch, it))
                     os.makedirs(save_dir, exist_ok=True)
