@@ -109,6 +109,7 @@ class Text2MotionDataset(data.Dataset):
         self.max_length = 30
         self.max_motion_length = opt.max_motion_length
         self.splits = np.array(splits, dtype=object)
+        self.pattern = re.compile(r'\bleft\b|\bright\b')
 
     def inv_transform(self, data):
         return data
