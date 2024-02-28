@@ -32,7 +32,7 @@ def load_vq_model():
                       vq_opt.dilation_growth_rate,
                       vq_opt.vq_act,
                       vq_opt.vq_norm)
-    ckpt = torch.load(pjoin(vq_opt.checkpoints_dir, vq_opt.dataset_name, vq_opt.name, 'model', 'net_best_fid.tar'),
+    ckpt = torch.load(pjoin(vq_opt.checkpoints_dir, vq_opt.dataset_name, vq_opt.name, 'model', 'latest.tar'),
                       map_location='cpu')
     model_key = 'vq_model' if 'vq_model' in ckpt else 'net'
     vq_model.load_state_dict(ckpt[model_key])
@@ -47,11 +47,12 @@ if __name__ == '__main__':
 
     opt.device = torch.device("cpu" if opt.gpu_id == -1 else "cuda:" + str(opt.gpu_id))
     torch.autograd.set_detect_anomaly(True)
-
+    opt.vq_name = "test"
+    opt.name = "test_base"
     opt.save_root = pjoin(opt.checkpoints_dir, opt.dataset_name, opt.name)
     opt.model_dir = pjoin(opt.save_root, 'model')
     opt.eval_dir = pjoin(opt.save_root, 'animation')
-    opt.log_dir = pjoin('./log/t2m/', opt.dataset_name, opt.name)
+    opt.log_dir = pjoin('./log/base/', opt.dataset_name, opt.name)
 
     os.makedirs(opt.model_dir, exist_ok=True)
     os.makedirs(opt.eval_dir, exist_ok=True)
