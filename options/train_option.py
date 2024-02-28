@@ -5,15 +5,15 @@ class TrainT2MOptions(BaseOptions):
     def initialize(self):
         BaseOptions.initialize(self)
         self.parser.add_argument('--batch_size', type=int, default=64, help='Batch size')
-        self.parser.add_argument('--max_epoch', type=int, default=64, help='Maximum number of epoch for training')
+        self.parser.add_argument('--max_epoch', type=int, default=300, help='Maximum number of epoch for training')
         # self.parser.add_argument('--max_iters', type=int, default=150_000, help='Training iterations')
 
         '''LR scheduler'''
         self.parser.add_argument('--lr', type=float, default=2e-4, help='Learning rate')
         self.parser.add_argument('--gamma', type=float, default=0.1, help='Learning rate schedule factor')
-        self.parser.add_argument('--milestones', default=[50_000], nargs="+", type=int,
+        self.parser.add_argument('--milestones', default=[300_000], nargs="+", type=int,
                             help="learning rate schedule (iterations)")
-        self.parser.add_argument('--warm_up_iter', default=2000, type=int, help='number of total iterations for warmup')
+        self.parser.add_argument('--warm_up_iter', default=8000, type=int, help='number of total iterations for warmup')
 
         '''Condition'''
         self.parser.add_argument('--cond_drop_prob', type=float, default=0.1, help='Drop ratio of condition, for classifier-free guidance')
@@ -26,7 +26,7 @@ class TrainT2MOptions(BaseOptions):
         self.parser.add_argument('--log_every', type=int, default=50, help='Frequency of printing training progress, (iteration)')
         # self.parser.add_argument('--save_every_e', type=int, default=100, help='Frequency of printing training progress')
         self.parser.add_argument('--eval_every_e', type=int, default=10, help='Frequency of animating eval results, (epoch)')
-        self.parser.add_argument('--save_latest', type=int, default=4000, help='Frequency of saving checkpoint, (iteration)')
+        self.parser.add_argument('--save_latest', type=int, default=20000, help='Frequency of saving checkpoint, (iteration)')
 
 
         self.is_train = True
