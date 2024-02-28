@@ -51,11 +51,9 @@ if __name__ == '__main__':
     opt.name = "test_base"
     opt.save_root = pjoin(opt.checkpoints_dir, opt.dataset_name, opt.name)
     opt.model_dir = pjoin(opt.save_root, 'model')
-    opt.eval_dir = pjoin(opt.save_root, 'animation')
     opt.log_dir = pjoin('./log/lm/', opt.dataset_name, opt.name)
 
     os.makedirs(opt.model_dir, exist_ok=True)
-    os.makedirs(opt.eval_dir, exist_ok=True)
     os.makedirs(opt.log_dir, exist_ok=True)
 
     opt.data_root = './dataset/mootion/'
