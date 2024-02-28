@@ -36,7 +36,7 @@ class EvaluatorModelWrapper(object):
             raise KeyError('Dataset not Recognized!!!')
 
         opt.dim_word = 300
-        opt.max_motion_length = 450
+        opt.max_motion_length = 448
         opt.dim_pos_ohot = len(POS_enumerator)
         opt.dim_motion_hidden = 1024
         opt.max_text_len = 30
@@ -128,7 +128,7 @@ class EvaluatorWrapper(object):
             'dataset_name': dataset_name,
             'device': device,
             'dim_word': 300,
-            'max_motion_length': 450,
+            'max_motion_length': 448,
             'dim_pos_ohot': len(POS_enumerator),
             'dim_motion_hidden': 1024,
             'max_text_len': 30,

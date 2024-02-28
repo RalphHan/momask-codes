@@ -1,9 +1,8 @@
-from os.path import join as pjoin
 from torch.utils import data
 from tqdm import tqdm
 from torch.utils.data._utils.collate import default_collate
 import random
-import codecs as cs
+from torch.nn.utils.rnn import pad_sequence
 import json
 import numpy as np
 import binascii
@@ -103,10 +102,24 @@ class MotionDataset(data.Dataset):
         return motion147
 
 
+def collate_fn(batch):
+    # 分别提取数据和标签
+    text = [item[0] for item in batch]
+    motion147 = [item[1] for item in batch]
+    m_length = [item[2] for item in batch]
+
+    # 填充数据使它们具有相同的长度
+    motion147 = pad_sequence(motion147, batch_first=True, padding_value=0)
+
+    # 将标签转换为张量
+    m_length = torch.tensor(m_length, dtype=torch.int64)
+
+    return text, motion147, m_length
+
+
 class Text2MotionDataset(data.Dataset):
     def __init__(self, opt, splits):
         self.opt = opt
-        self.max_length = 30
         self.max_motion_length = opt.max_motion_length
         self.splits = np.array(splits, dtype=object)
         self.pattern = re.compile(r'\bleft\b|\bright\b')
@@ -125,37 +138,23 @@ class Text2MotionDataset(data.Dataset):
         root_positions = np.frombuffer(binascii.a2b_base64(data["root_positions"]),
                                        dtype=data["dtype"]).reshape(-1, 3)
         if data['n_frames'] > self.max_motion_length:
-            idx = random.randint(0, data['n_frames'] - self.max_motion_length)
-            rotations = rotations[idx:idx + self.max_motion_length]
-            root_positions = root_positions[idx:idx + self.max_motion_length]
+            m_length = self.max_motion_length
+        else:
+            if random.random() > 0.67:
+                m_length = (data['n_frames'] // self.opt.unit_length - 1) * self.opt.unit_length
+            else:
+                m_length = (data['n_frames'] // self.opt.unit_length) * self.opt.unit_length
+        idx = random.randint(0, data['n_frames'] - m_length)
+        rotations = rotations[idx:idx + m_length]
+        root_positions = root_positions[idx:idx + m_length]
         desc = random.choice(data['desc'])
         action = data.get('action')
         if random.random() > 0.5:
             rotations, root_positions = mirror_motion(rotations, root_positions)
-            desc = mirror_text(desc)
+            desc = mirror_text(desc, self.pattern)
         motion147 = motion_to_147(rotations, root_positions)
-
-        motion, m_length, text_list = data['motion'], data['length'], data['text']
-        # Randomly select a caption
-        text_data = random.choice(text_list)
-        caption, tokens = text_data['caption'], text_data['tokens']
-
-        if self.opt.unit_length < 10:
-            coin2 = np.random.choice(['single', 'single', 'double'])
+        if action:
+            text = action + " || " + desc
         else:
-            coin2 = 'single'
-
-        if coin2 == 'double':
-            m_length = (m_length // self.opt.unit_length - 1) * self.opt.unit_length
-        elif coin2 == 'single':
-            m_length = (m_length // self.opt.unit_length) * self.opt.unit_length
-        idx = random.randint(0, len(motion) - m_length)
-        motion = motion[idx:idx + m_length]
-
-        if m_length < self.max_motion_length:
-            motion = np.concatenate([motion,
-                                     np.zeros((self.max_motion_length - m_length, motion.shape[1]))
-                                     ], axis=0)
-        # print(word_embeddings.shape, motion.shape)
-        # print(tokens)
-        return caption, motion, m_length
+            text = desc
+        return text, torch.from_numpy(motion147), m_length

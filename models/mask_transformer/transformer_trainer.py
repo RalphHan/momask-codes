@@ -1,15 +1,14 @@
 import torch
 from collections import defaultdict
 import torch.optim as optim
-# import tensorflow as tf
 from torch.utils.tensorboard import SummaryWriter
 from collections import OrderedDict
 from utils.utils import *
 from os.path import join as pjoin
-from utils.eval_t2m import evaluation_mask_transformer, evaluation_res_transformer
 from models.mask_transformer.tools import *
 
-from einops import rearrange, repeat
+import shutil
+import json
 
 
 def def_value():
@@ -47,10 +46,6 @@ class MaskTransformerTrainer:
 
         conds = conds.to(self.device).float() if torch.is_tensor(conds) else conds
 
-        # loss_dict = {}
-        # self.pred_ids = []
-        # self.acc = []
-
         _loss, _pred_ids, _acc = self.t2m_transformer(code_idx[..., 0], conds, m_lens)
 
         return _loss, _acc
@@ -65,7 +60,7 @@ class MaskTransformerTrainer:
 
         return loss.item(), acc
 
-    def save(self, file_name, ep, total_it):
+    def save(self, file_name, ep, total_it, val_loss):
         t2m_trans_state_dict = self.t2m_transformer.state_dict()
         clip_weights = [e for e in t2m_trans_state_dict.keys() if e.startswith('clip_model.')]
         for e in clip_weights:
@@ -76,6 +71,7 @@ class MaskTransformerTrainer:
             'scheduler': self.scheduler.state_dict(),
             'ep': ep,
             'total_it': total_it,
+            'val_loss': val_loss
         }
         torch.save(state, file_name)
 
@@ -117,13 +113,9 @@ class MaskTransformerTrainer:
         print(f'Total Epochs: {self.opt.max_epoch}, Total Iters: {total_iters}')
         print('Iters Per Epoch, Training: %04d, Validation: %03d' % (len(train_loader), len(val_loader)))
         logs = defaultdict(def_value, OrderedDict())
-
-        best_acc = 0.
-
+        self.t2m_transformer.train()
         while epoch < self.opt.max_epoch:
-            self.t2m_transformer.train()
             self.vq_model.eval()
-
             for i, batch in enumerate(train_loader):
                 it += 1
                 if it < self.opt.warm_up_iter:
@@ -136,8 +128,6 @@ class MaskTransformerTrainer:
 
                 if it % self.opt.log_every == 0:
                     mean_loss = OrderedDict()
-                    # self.logger.add_scalar('val_loss', val_loss, it)
-                    # self.l
                     for tag, value in logs.items():
                         self.logger.add_scalar('Train/%s' % tag, value / self.opt.log_every, it)
                         mean_loss[tag] = value / self.opt.log_every
@@ -145,32 +135,28 @@ class MaskTransformerTrainer:
                     print_current_loss(start_time, it, total_iters, mean_loss, epoch=epoch, inner_iter=i)
 
                 if it % self.opt.save_latest == 0:
-                    self.save(pjoin(self.opt.model_dir, 'latest.tar'), epoch, it)
-
-            self.save(pjoin(self.opt.model_dir, 'latest.tar'), epoch, it)
+                    print('Validation time:')
+                    self.vq_model.eval()
+                    self.t2m_transformer.eval()
+                    val_logs = defaultdict(def_value, OrderedDict())
+                    with torch.no_grad():
+                        for i, batch_data in enumerate(val_loader):
+                            loss, acc = self.forward(batch_data)
+                            val_logs['loss'] += loss.item()
+                            val_logs["acc"] += acc
+                            val_logs['lr'] += self.opt_t2m_transformer.param_groups[0]['lr']
+                    val_mean_loss = OrderedDict()
+                    for tag, value in val_logs.items():
+                        val_mean_loss[tag] = value / len(val_loader)
+                        self.logger.add_scalar('Val/%s' % tag, val_mean_loss[tag], it)
+                    print(f"Validation loss:{val_mean_loss['loss']:.5f}, Accuracy:{val_mean_loss['acc']:.5f}")
+                    self.save(pjoin(self.opt.model_dir, 'latest.tar'), epoch, it, val_mean_loss)
+                    shutil.copyfile(pjoin(self.opt.model_dir, 'latest.tar'),
+                                    pjoin(self.opt.model_dir, 'E%02dI%07d.tar' % (epoch, it)))
+                    with open(pjoin(self.opt.model_dir, 'val_loss.jsonl'), "a") as f:
+                        f.write(json.dumps({'E%02dI%07d' % (epoch, it): val_mean_loss}) + "\n")
+                    self.t2m_transformer.train()
             epoch += 1
-
-            print('Validation time:')
-            self.vq_model.eval()
-            self.t2m_transformer.eval()
-
-            val_loss = []
-            val_acc = []
-            with torch.no_grad():
-                for i, batch_data in enumerate(val_loader):
-                    loss, acc = self.forward(batch_data)
-                    val_loss.append(loss.item())
-                    val_acc.append(acc)
-
-            print(f"Validation loss:{np.mean(val_loss):.3f}, accuracy:{np.mean(val_acc):.3f}")
-
-            self.logger.add_scalar('Val/loss', np.mean(val_loss), epoch)
-            self.logger.add_scalar('Val/acc', np.mean(val_acc), epoch)
-
-            if np.mean(val_acc) > best_acc:
-                print(f"Improved accuracy from {best_acc:.02f} to {np.mean(val_acc)}!!!")
-                self.save(pjoin(self.opt.model_dir, 'net_best_acc.tar'), epoch, it)
-                best_acc = np.mean(val_acc)
 
 
 class ResidualTransformerTrainer:
@@ -219,7 +205,7 @@ class ResidualTransformerTrainer:
 
         return loss.item(), acc
 
-    def save(self, file_name, ep, total_it):
+    def save(self, file_name, ep, total_it, val_loss):
         res_trans_state_dict = self.res_transformer.state_dict()
         clip_weights = [e for e in res_trans_state_dict.keys() if e.startswith('clip_model.')]
         for e in clip_weights:
@@ -230,6 +216,7 @@ class ResidualTransformerTrainer:
             'scheduler': self.scheduler.state_dict(),
             'ep': ep,
             'total_it': total_it,
+            'val_loss': val_loss
         }
         torch.save(state, file_name)
 
@@ -271,13 +258,9 @@ class ResidualTransformerTrainer:
         print(f'Total Epochs: {self.opt.max_epoch}, Total Iters: {total_iters}')
         print('Iters Per Epoch, Training: %04d, Validation: %03d' % (len(train_loader), len(val_loader)))
         logs = defaultdict(def_value, OrderedDict())
-        best_loss = 100
-        best_acc = 0
-
+        self.res_transformer.train()
         while epoch < self.opt.max_epoch:
-            self.res_transformer.train()
             self.vq_model.eval()
-
             for i, batch in enumerate(train_loader):
                 it += 1
                 if it < self.opt.warm_up_iter:
@@ -290,8 +273,6 @@ class ResidualTransformerTrainer:
 
                 if it % self.opt.log_every == 0:
                     mean_loss = OrderedDict()
-                    # self.logger.add_scalar('val_loss', val_loss, it)
-                    # self.l
                     for tag, value in logs.items():
                         self.logger.add_scalar('Train/%s' % tag, value / self.opt.log_every, it)
                         mean_loss[tag] = value / self.opt.log_every
@@ -299,34 +280,26 @@ class ResidualTransformerTrainer:
                     print_current_loss(start_time, it, total_iters, mean_loss, epoch=epoch, inner_iter=i)
 
                 if it % self.opt.save_latest == 0:
-                    self.save(pjoin(self.opt.model_dir, 'latest.tar'), epoch, it)
+                    print('Validation time:')
+                    self.vq_model.eval()
+                    self.res_transformer.eval()
+                    val_logs = defaultdict(def_value, OrderedDict())
+                    with torch.no_grad():
+                        for i, batch_data in enumerate(val_loader):
+                            loss, acc = self.forward(batch_data)
+                            val_logs['loss'] += loss.item()
+                            val_logs["acc"] += acc
+                            val_logs['lr'] += self.opt_res_transformer.param_groups[0]['lr']
+                    val_mean_loss = OrderedDict()
+                    for tag, value in val_logs.items():
+                        val_mean_loss[tag] = value / len(val_loader)
+                        self.logger.add_scalar('Val/%s' % tag, val_mean_loss[tag], it)
+                    print(f"Validation loss:{val_mean_loss['loss']:.5f}, Accuracy:{val_mean_loss['acc']:.5f}")
 
+                    self.save(pjoin(self.opt.model_dir, 'latest.tar'), epoch, it, val_mean_loss)
+                    shutil.copyfile(pjoin(self.opt.model_dir, 'latest.tar'),
+                                    pjoin(self.opt.model_dir, 'E%02dI%07d.tar' % (epoch, it)))
+                    with open(pjoin(self.opt.model_dir, 'val_loss.jsonl'), "a") as f:
+                        f.write(json.dumps({'E%02dI%07d' % (epoch, it): val_mean_loss}) + "\n")
+                    self.res_transformer.train()
             epoch += 1
-            self.save(pjoin(self.opt.model_dir, 'latest.tar'), epoch, it)
-
-            print('Validation time:')
-            self.vq_model.eval()
-            self.res_transformer.eval()
-
-            val_loss = []
-            val_acc = []
-            with torch.no_grad():
-                for i, batch_data in enumerate(val_loader):
-                    loss, acc = self.forward(batch_data)
-                    val_loss.append(loss.item())
-                    val_acc.append(acc)
-
-            print(f"Validation loss:{np.mean(val_loss):.3f}, Accuracy:{np.mean(val_acc):.3f}")
-
-            self.logger.add_scalar('Val/loss', np.mean(val_loss), epoch)
-            self.logger.add_scalar('Val/acc', np.mean(val_acc), epoch)
-
-            if np.mean(val_loss) < best_loss:
-                print(f"Improved loss from {best_loss:.02f} to {np.mean(val_loss)}!!!")
-                self.save(pjoin(self.opt.model_dir, 'net_best_loss.tar'), epoch, it)
-                best_loss = np.mean(val_loss)
-
-            if np.mean(val_acc) > best_acc:
-                print(f"Improved acc from {best_acc:.02f} to {np.mean(val_acc)}!!!")
-                # self.save(pjoin(self.opt.model_dir, 'net_best_loss.tar'), epoch, it)
-                best_acc = np.mean(val_acc)

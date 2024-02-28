@@ -14,7 +14,7 @@ from options.train_option import TrainT2MOptions
 from utils.get_opt import get_opt
 from utils.fixseed import fixseed
 
-from data.t2m_dataset import Text2MotionDataset
+from data.t2m_dataset import Text2MotionDataset, collate_fn
 
 
 def load_vq_model():
@@ -52,7 +52,7 @@ if __name__ == '__main__':
     opt.save_root = pjoin(opt.checkpoints_dir, opt.dataset_name, opt.name)
     opt.model_dir = pjoin(opt.save_root, 'model')
     opt.eval_dir = pjoin(opt.save_root, 'animation')
-    opt.log_dir = pjoin('./log/base/', opt.dataset_name, opt.name)
+    opt.log_dir = pjoin('./log/lm/', opt.dataset_name, opt.name)
 
     os.makedirs(opt.model_dir, exist_ok=True)
     os.makedirs(opt.eval_dir, exist_ok=True)
@@ -98,8 +98,10 @@ if __name__ == '__main__':
     train_dataset = Text2MotionDataset(opt, train_split)
     val_dataset = Text2MotionDataset(opt, val_split)
 
-    train_loader = DataLoader(train_dataset, batch_size=opt.batch_size, num_workers=4, shuffle=True, drop_last=True)
-    val_loader = DataLoader(val_dataset, batch_size=opt.batch_size, num_workers=4, shuffle=True, drop_last=True)
+    train_loader = DataLoader(train_dataset, batch_size=opt.batch_size, num_workers=4, collate_fn=collate_fn,
+                              shuffle=True, drop_last=True)
+    val_loader = DataLoader(val_dataset, batch_size=opt.batch_size, num_workers=4, collate_fn=collate_fn,
+                            shuffle=True, drop_last=True)
 
     trainer = MaskTransformerTrainer(opt, t2m_transformer, vq_model)
 

@@ -26,7 +26,7 @@ class TrainT2MOptions(BaseOptions):
         self.parser.add_argument('--log_every', type=int, default=50, help='Frequency of printing training progress, (iteration)')
         # self.parser.add_argument('--save_every_e', type=int, default=100, help='Frequency of printing training progress')
         self.parser.add_argument('--eval_every_e', type=int, default=10, help='Frequency of animating eval results, (epoch)')
-        self.parser.add_argument('--save_latest', type=int, default=500, help='Frequency of saving checkpoint, (iteration)')
+        self.parser.add_argument('--save_latest', type=int, default=4000, help='Frequency of saving checkpoint, (iteration)')
 
 
         self.is_train = True
