@@ -134,7 +134,7 @@ class MaskTransformerTrainer:
                     logs = defaultdict(def_value, OrderedDict())
                     print_current_loss(start_time, it, total_iters, mean_loss, epoch=epoch, inner_iter=i)
 
-                if it % self.opt.save_latest == 80:
+                if it % self.opt.save_latest == 0:
                     print('Validation time:')
                     self.vq_model.eval()
                     self.t2m_transformer.eval()
@@ -279,7 +279,7 @@ class ResidualTransformerTrainer:
                     logs = defaultdict(def_value, OrderedDict())
                     print_current_loss(start_time, it, total_iters, mean_loss, epoch=epoch, inner_iter=i)
 
-                if it % self.opt.save_latest == 80:
+                if it % self.opt.save_latest == 0:
                     print('Validation time:')
                     self.vq_model.eval()
                     self.res_transformer.eval()
