@@ -1,4 +1,4 @@
-if [ $# -eq 1 ]; then
+if [ $# -eq 0 ]; then
     docker run -itd \
       --name res \
       --gpus '"device=1"' \
