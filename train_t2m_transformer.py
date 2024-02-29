@@ -43,16 +43,16 @@ def load_vq_model():
 if __name__ == '__main__':
     parser = TrainT2MOptions()
     opt = parser.parse()
-    fixseed(opt.seed)
-
-    opt.device = torch.device("cpu" if opt.gpu_id == -1 else "cuda:" + str(opt.gpu_id))
-    torch.autograd.set_detect_anomaly(True)
     opt.vq_name = "test"
     opt.name = "test_base"
+    parser.save()
+
+    fixseed(opt.seed)
+    opt.device = torch.device("cpu" if opt.gpu_id == -1 else "cuda:" + str(opt.gpu_id))
+    torch.autograd.set_detect_anomaly(True)
     opt.save_root = pjoin(opt.checkpoints_dir, opt.dataset_name, opt.name)
     opt.model_dir = pjoin(opt.save_root, 'model')
     opt.log_dir = pjoin('./log/lm/', opt.dataset_name, opt.name)
-
     os.makedirs(opt.model_dir, exist_ok=True)
     os.makedirs(opt.log_dir, exist_ok=True)
 
