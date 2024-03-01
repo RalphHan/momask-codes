@@ -126,13 +126,14 @@ def init_data():
 
 
 @app.get("/angle/")
-async def angle(prompt: str, length: int = -1):
+async def angle(prompt: str, length: int = -1, temp: float = 1.0):
     vq_model, t2m_transformer, res_transformer, opt = data["vq_model"], data["t2m_transformer"], data[
         "res_transformer"], data["opt"]
     if length == -1:
         length = opt.max_motion_length
     else:
         length = np.clip(length, 64, opt.max_motion_length).item()
+    temp = np.clip(temp, 0.1, 10.0).item()
     captions = [prompt]
     length_list = [length]
 
@@ -145,7 +146,7 @@ async def angle(prompt: str, length: int = -1):
         mids = t2m_transformer.generate(captions, token_lens,
                                         timesteps=opt.time_steps,
                                         cond_scale=opt.cond_scale,
-                                        temperature=opt.temperature,
+                                        temperature=temp,
                                         topk_filter_thres=opt.topkr,
                                         gsample=opt.gumbel_sample)
         mids = res_transformer.generate(mids, captions, token_lens, temperature=1, cond_scale=5)
