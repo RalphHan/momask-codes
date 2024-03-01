@@ -14,6 +14,7 @@ from functools import partial
 from models.mask_transformer.tools import *
 from torch.distributions.categorical import Categorical
 
+
 class InputProcess(nn.Module):
     def __init__(self, input_feats, latent_dim):
         super().__init__()
@@ -23,13 +24,14 @@ class InputProcess(nn.Module):
 
     def forward(self, x):
         # [bs, ntokens, input_feats]
-        x = x.permute((1, 0, 2)) # [seqen, bs, input_feats]
+        x = x.permute((1, 0, 2))  # [seqen, bs, input_feats]
         # print(x.shape)
         x = self.poseEmbedding(x)  # [seqlen, bs, d]
         return x
 
+
 class PositionalEncoding(nn.Module):
-    #Borrow from MDM, the same as above, but add dropout, exponential may improve precision
+    # Borrow from MDM, the same as above, but add dropout, exponential may improve precision
     def __init__(self, d_model, dropout=0.1, max_len=5000):
         super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
@@ -39,7 +41,7 @@ class PositionalEncoding(nn.Module):
         div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-np.log(10000.0) / d_model))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0).transpose(0, 1) #[max_len, 1, d_model]
+        pe = pe.unsqueeze(0).transpose(0, 1)  # [max_len, 1, d_model]
 
         self.register_buffer('pe', pe)
 
@@ -48,13 +50,14 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:x.shape[0], :]
         return self.dropout(x)
 
+
 class OutputProcess_Bert(nn.Module):
     def __init__(self, out_feats, latent_dim):
         super().__init__()
         self.dense = nn.Linear(latent_dim, latent_dim)
         self.transform_act_fn = F.gelu
         self.LayerNorm = nn.LayerNorm(latent_dim, eps=1e-12)
-        self.poseFinal = nn.Linear(latent_dim, out_feats) #Bias!
+        self.poseFinal = nn.Linear(latent_dim, out_feats)  # Bias!
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -64,13 +67,14 @@ class OutputProcess_Bert(nn.Module):
         output = output.permute(1, 2, 0)  # [bs, c, seqlen]
         return output
 
+
 class OutputProcess(nn.Module):
     def __init__(self, out_feats, latent_dim):
         super().__init__()
         self.dense = nn.Linear(latent_dim, latent_dim)
         self.transform_act_fn = F.gelu
         self.LayerNorm = nn.LayerNorm(latent_dim, eps=1e-12)
-        self.poseFinal = nn.Linear(latent_dim, out_feats) #Bias!
+        self.poseFinal = nn.Linear(latent_dim, out_feats)  # Bias!
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -86,7 +90,8 @@ class MaskTransformer(nn.Module):
                  num_heads=4, dropout=0.1, clip_dim=512, cond_drop_prob=0.1,
                  clip_version=None, opt=None, **kargs):
         super(MaskTransformer, self).__init__()
-        print(f'latent_dim: {latent_dim}, ff_size: {ff_size}, nlayers: {num_layers}, nheads: {num_heads}, dropout: {dropout}')
+        print(
+            f'latent_dim: {latent_dim}, ff_size: {ff_size}, nlayers: {num_layers}, nheads: {num_heads}, dropout: {dropout}')
 
         self.code_dim = code_dim
         self.latent_dim = latent_dim
@@ -128,7 +133,6 @@ class MaskTransformer(nn.Module):
         else:
             raise KeyError("Unsupported condition mode!!!")
 
-
         _num_tokens = opt.num_tokens + 2  # two dummy tokens, one for masking, one for padding
         self.mask_id = opt.num_tokens
         self.pad_id = opt.num_tokens + 1
@@ -157,7 +161,8 @@ class MaskTransformer(nn.Module):
         '''
         assert self.training, 'Only necessary in training mode'
         c, d = codebook.shape
-        self.token_emb.weight = nn.Parameter(torch.cat([codebook, torch.zeros(size=(2, d), device=codebook.device)], dim=0)) #add two dummy tokens, 0 vectors
+        self.token_emb.weight = nn.Parameter(torch.cat([codebook, torch.zeros(size=(2, d), device=codebook.device)],
+                                                       dim=0))  # add two dummy tokens, 0 vectors
         self.token_emb.requires_grad_(False)
         # self.token_emb.weight.requires_grad = False
         # self.token_emb_ready = True
@@ -197,7 +202,7 @@ class MaskTransformer(nn.Module):
         return feat_clip_text
 
     def mask_cond(self, cond, force_mask=False):
-        bs, d =  cond.shape
+        bs, d = cond.shape
         if force_mask:
             return torch.zeros_like(cond)
         elif self.training and self.cond_drop_prob > 0.:
@@ -224,18 +229,18 @@ class MaskTransformer(nn.Module):
         # (b, seqlen, d) -> (seqlen, b, latent_dim)
         x = self.input_process(x)
 
-        cond = self.cond_emb(cond).unsqueeze(0) #(1, b, latent_dim)
+        cond = self.cond_emb(cond).unsqueeze(0)  # (1, b, latent_dim)
 
         x = self.position_enc(x)
-        xseq = torch.cat([cond, x], dim=0) #(seqlen+1, b, latent_dim)
+        xseq = torch.cat([cond, x], dim=0)  # (seqlen+1, b, latent_dim)
 
-        padding_mask = torch.cat([torch.zeros_like(padding_mask[:, 0:1]), padding_mask], dim=1) #(b, seqlen+1)
+        padding_mask = torch.cat([torch.zeros_like(padding_mask[:, 0:1]), padding_mask], dim=1)  # (b, seqlen+1)
         # print(xseq.shape, padding_mask.shape)
 
         # print(padding_mask.shape, xseq.shape)
 
-        output = self.seqTransEncoder(xseq, src_key_padding_mask=padding_mask)[1:] #(seqlen, b, e)
-        logits = self.output_process(output) #(seqlen, b, e) -> (b, ntoken, seqlen)
+        output = self.seqTransEncoder(xseq, src_key_padding_mask=padding_mask)[1:]  # (seqlen, b, e)
+        logits = self.output_process(output)  # (seqlen, b, e) -> (b, ntoken, seqlen)
         return logits
 
     def forward(self, ids, y, m_lens):
@@ -250,7 +255,7 @@ class MaskTransformer(nn.Module):
         device = ids.device
 
         # Positions that are PADDED are ALL FALSE
-        non_pad_mask = lengths_to_mask(m_lens, ntokens) #(b, n)
+        non_pad_mask = lengths_to_mask(m_lens, ntokens)  # (b, n)
         ids = torch.where(non_pad_mask, ids, self.pad_id)
 
         force_mask = False
@@ -264,7 +269,6 @@ class MaskTransformer(nn.Module):
             force_mask = True
         else:
             raise NotImplementedError("Unsupported condition mode!!!")
-
 
         '''
         Prepare mask
@@ -405,10 +409,10 @@ class MaskTransformer(nn.Module):
                 pred_ids = gumbel_sample(filtered_logits, temperature=temperature, dim=-1)  # (b, seqlen)
             else:  # use multinomial sampling
                 # print("2222")
-                probs = F.softmax(filtered_logits, dim=-1)  # (b, seqlen, ntoken)
+                probs = F.softmax(filtered_logits / temperature, dim=-1)  # (b, seqlen, ntoken)
                 # print(temperature, starting_temperature, steps_until_x0, timesteps)
                 # print(probs / temperature)
-                pred_ids = Categorical(probs / temperature).sample()  # (b, seqlen)
+                pred_ids = Categorical(probs).sample()  # (b, seqlen)
 
             # print(pred_ids.max(), pred_ids.min())
             # if pred_ids.
@@ -427,7 +431,6 @@ class MaskTransformer(nn.Module):
         ids = torch.where(padding_mask, -1, ids)
         # print("Final", ids.max(), ids.min())
         return ids
-
 
     @torch.no_grad()
     @eval_decorator
@@ -612,7 +615,8 @@ class ResidualTransformer(nn.Module):
                  num_heads=4, dropout=0.1, clip_dim=512, shared_codebook=False, share_weight=False,
                  clip_version=None, opt=None, **kargs):
         super(ResidualTransformer, self).__init__()
-        print(f'latent_dim: {latent_dim}, ff_size: {ff_size}, nlayers: {num_layers}, nheads: {num_heads}, dropout: {dropout}')
+        print(
+            f'latent_dim: {latent_dim}, ff_size: {ff_size}, nlayers: {num_layers}, nheads: {num_heads}, dropout: {dropout}')
 
         # assert shared_codebook == True, "Only support shared codebook right now!"
 
@@ -657,7 +661,6 @@ class ResidualTransformer(nn.Module):
         else:
             raise KeyError("Unsupported condition mode!!!")
 
-
         _num_tokens = opt.num_tokens + 1  # one dummy tokens for padding
         self.pad_id = opt.num_tokens
 
@@ -666,7 +669,7 @@ class ResidualTransformer(nn.Module):
 
         if shared_codebook:
             token_embed = nn.Parameter(torch.normal(mean=0, std=0.02, size=(_num_tokens, code_dim)))
-            self.token_embed_weight = token_embed.expand(opt.num_quantizers-1, _num_tokens, code_dim)
+            self.token_embed_weight = token_embed.expand(opt.num_quantizers - 1, _num_tokens, code_dim)
             if share_weight:
                 self.output_proj_weight = self.token_embed_weight
                 self.output_proj_bias = None
@@ -674,12 +677,13 @@ class ResidualTransformer(nn.Module):
                 output_proj = nn.Parameter(torch.normal(mean=0, std=0.02, size=(_num_tokens, code_dim)))
                 output_bias = nn.Parameter(torch.zeros(size=(_num_tokens,)))
                 # self.output_proj_bias = 0
-                self.output_proj_weight = output_proj.expand(opt.num_quantizers-1, _num_tokens, code_dim)
-                self.output_proj_bias = output_bias.expand(opt.num_quantizers-1, _num_tokens)
+                self.output_proj_weight = output_proj.expand(opt.num_quantizers - 1, _num_tokens, code_dim)
+                self.output_proj_bias = output_bias.expand(opt.num_quantizers - 1, _num_tokens)
 
         else:
             if share_weight:
-                self.embed_proj_shared_weight = nn.Parameter(torch.normal(mean=0, std=0.02, size=(opt.num_quantizers - 2, _num_tokens, code_dim)))
+                self.embed_proj_shared_weight = nn.Parameter(
+                    torch.normal(mean=0, std=0.02, size=(opt.num_quantizers - 2, _num_tokens, code_dim)))
                 self.token_embed_weight_ = nn.Parameter(torch.normal(mean=0, std=0.02, size=(1, _num_tokens, code_dim)))
                 self.output_proj_weight_ = nn.Parameter(torch.normal(mean=0, std=0.02, size=(1, _num_tokens, code_dim)))
                 self.output_proj_bias = None
@@ -706,7 +710,7 @@ class ResidualTransformer(nn.Module):
     # def
 
     def mask_cond(self, cond, force_mask=False):
-        bs, d =  cond.shape
+        bs, d = cond.shape
         if force_mask:
             return torch.zeros_like(cond)
         elif self.training and self.cond_drop_prob > 0.:
@@ -748,7 +752,6 @@ class ResidualTransformer(nn.Module):
         feat_clip_text = self.clip_model.encode_text(text).float()
         return feat_clip_text
 
-
     def q_schedule(self, bs, low, high):
         noise = uniform((bs,), device=self.opt.device)
         schedule = 1 - cosine_schedule(noise)
@@ -759,7 +762,7 @@ class ResidualTransformer(nn.Module):
             # if not self.registered:
             self.output_proj_weight = torch.cat([self.embed_proj_shared_weight, self.output_proj_weight_], dim=0)
             self.token_embed_weight = torch.cat([self.token_embed_weight_, self.embed_proj_shared_weight], dim=0)
-                # self.registered = True
+            # self.registered = True
 
     def output_project(self, logits, qids):
         '''
@@ -778,8 +781,6 @@ class ResidualTransformer(nn.Module):
         if output_proj_bias is not None:
             output += output + output_proj_bias.unsqueeze(-1)
         return output
-
-
 
     def trans_forward(self, motion_codes, qids, cond, padding_mask, force_mask=False):
         '''
@@ -821,16 +822,16 @@ class ResidualTransformer(nn.Module):
         qids = torch.full((bs,), q_id, dtype=torch.long, device=motion_codes.device)
         if force_mask:
             logits = self.trans_forward(motion_codes, qids, cond_vector, padding_mask, force_mask=True)
-            logits = self.output_project(logits, qids-1)
+            logits = self.output_project(logits, qids - 1)
             return logits
 
         logits = self.trans_forward(motion_codes, qids, cond_vector, padding_mask)
-        logits = self.output_project(logits, qids-1)
+        logits = self.output_project(logits, qids - 1)
         if cond_scale == 1:
             return logits
 
         aux_logits = self.trans_forward(motion_codes, qids, cond_vector, padding_mask, force_mask=True)
-        aux_logits = self.output_project(aux_logits, qids-1)
+        aux_logits = self.output_project(aux_logits, qids - 1)
 
         scaled_logits = aux_logits + (logits - aux_logits) * cond_scale
         return scaled_logits
@@ -852,7 +853,7 @@ class ResidualTransformer(nn.Module):
         non_pad_mask = lengths_to_mask(m_lens, ntokens)  # (b, n)
 
         q_non_pad_mask = repeat(non_pad_mask, 'b n -> b n q', q=num_quant_layers)
-        all_indices = torch.where(q_non_pad_mask, all_indices, self.pad_id) #(b, n, q)
+        all_indices = torch.where(q_non_pad_mask, all_indices, self.pad_id)  # (b, n, q)
 
         # randomly sample quantization layers to work on, [1, num_q)
         active_q_layers = q_schedule(bs, low=1, high=num_quant_layers, device=device)
@@ -863,7 +864,7 @@ class ResidualTransformer(nn.Module):
         # print(token_embed.shape, gather_indices.shape)
         all_codes = token_embed.gather(1, gather_indices)  # (b, n, d, q-1)
 
-        cumsum_codes = torch.cumsum(all_codes, dim=-1) #(b, n, d, q-1)
+        cumsum_codes = torch.cumsum(all_codes, dim=-1)  # (b, n, d, q-1)
 
         active_indices = all_indices[torch.arange(bs), :, active_q_layers]  # (b, n)
         history_sum = cumsum_codes[torch.arange(bs), :, :, active_q_layers - 1]
@@ -881,7 +882,7 @@ class ResidualTransformer(nn.Module):
             raise NotImplementedError("Unsupported condition mode!!!")
 
         logits = self.trans_forward(history_sum, active_q_layers, cond_vector, ~non_pad_mask, force_mask)
-        logits = self.output_project(logits, active_q_layers-1)
+        logits = self.output_project(logits, active_q_layers - 1)
         ce_loss, pred_id, acc = cal_performance(logits, active_indices, ignore_index=self.pad_id)
 
         return ce_loss, pred_id, acc
@@ -895,7 +896,7 @@ class ResidualTransformer(nn.Module):
                  temperature=1,
                  topk_filter_thres=0.9,
                  cond_scale=2,
-                 num_res_layers=-1, # If it's -1, use all.
+                 num_res_layers=-1,  # If it's -1, use all.
                  ):
 
         # print(self.opt.num_quantizers)
@@ -926,13 +927,13 @@ class ResidualTransformer(nn.Module):
         motion_ids = torch.where(padding_mask, self.pad_id, motion_ids)
         all_indices = [motion_ids]
         history_sum = 0
-        num_quant_layers = self.opt.num_quantizers if num_res_layers==-1 else num_res_layers+1
+        num_quant_layers = self.opt.num_quantizers if num_res_layers == -1 else num_res_layers + 1
 
         for i in range(1, num_quant_layers):
             # print(f"--> Working on {i}-th quantizer")
             # Start from all tokens being masked
             # qids = torch.full((batch_size,), i, dtype=torch.long, device=motion_ids.device)
-            token_embed = self.token_embed_weight[i-1]
+            token_embed = self.token_embed_weight[i - 1]
             token_embed = repeat(token_embed, 'c d -> b c d', b=batch_size)
             gathered_ids = repeat(motion_ids, 'b n -> b n d', d=token_embed.shape[-1])
             history_sum += token_embed.gather(1, gathered_ids)
@@ -959,20 +960,20 @@ class ResidualTransformer(nn.Module):
         all_indices = torch.stack(all_indices, dim=-1)
         # padding_mask = repeat(padding_mask, 'b n -> b n q', q=all_indices.shape[-1])
         # all_indices = torch.where(padding_mask, -1, all_indices)
-        all_indices = torch.where(all_indices==self.pad_id, -1, all_indices)
+        all_indices = torch.where(all_indices == self.pad_id, -1, all_indices)
         # all_indices = all_indices.masked_fill()
         return all_indices
 
     @torch.no_grad()
     @eval_decorator
     def edit(self,
-            motion_ids,
-            conds,
-            m_lens,
-            temperature=1,
-            topk_filter_thres=0.9,
-            cond_scale=2
-            ):
+             motion_ids,
+             conds,
+             m_lens,
+             temperature=1,
+             topk_filter_thres=0.9,
+             cond_scale=2
+             ):
 
         # print(self.opt.num_quantizers)
         # assert len(timesteps) >= len(cond_scales) == self.opt.num_quantizers
@@ -1007,7 +1008,7 @@ class ResidualTransformer(nn.Module):
             # print(f"--> Working on {i}-th quantizer")
             # Start from all tokens being masked
             # qids = torch.full((batch_size,), i, dtype=torch.long, device=motion_ids.device)
-            token_embed = self.token_embed_weight[i-1]
+            token_embed = self.token_embed_weight[i - 1]
             token_embed = repeat(token_embed, 'c d -> b c d', b=batch_size)
             gathered_ids = repeat(motion_ids, 'b n -> b n d', d=token_embed.shape[-1])
             history_sum += token_embed.gather(1, gathered_ids)
@@ -1034,6 +1035,6 @@ class ResidualTransformer(nn.Module):
         all_indices = torch.stack(all_indices, dim=-1)
         # padding_mask = repeat(padding_mask, 'b n -> b n q', q=all_indices.shape[-1])
         # all_indices = torch.where(padding_mask, -1, all_indices)
-        all_indices = torch.where(all_indices==self.pad_id, -1, all_indices)
+        all_indices = torch.where(all_indices == self.pad_id, -1, all_indices)
         # all_indices = all_indices.masked_fill()
         return all_indices
