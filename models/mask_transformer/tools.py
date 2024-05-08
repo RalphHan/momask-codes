@@ -3,15 +3,18 @@ import torch.nn.functional as F
 import math
 from einops import rearrange
 
+
 # return mask where padding is FALSE
 def lengths_to_mask(lengths, max_len):
     # max_len = max(lengths)
     mask = torch.arange(max_len, device=lengths.device).expand(len(lengths), max_len) < lengths.unsqueeze(1)
-    return mask #(b, len)
+    return mask  # (b, len)
+
 
 # return mask where padding is ALL FALSE
 def get_pad_mask_idx(seq, pad_idx):
     return (seq != pad_idx).unsqueeze(1)
+
 
 # Given seq: (b, s)
 # Return mat: (1, s, s)
@@ -30,8 +33,10 @@ def get_subsequent_mask(seq):
 def exists(val):
     return val is not None
 
+
 def default(val, d):
     return val if exists(val) else d
+
 
 def eval_decorator(fn):
     def inner(model, *args, **kwargs):
@@ -40,10 +45,13 @@ def eval_decorator(fn):
         out = fn(model, *args, **kwargs)
         model.train(was_training)
         return out
+
     return inner
 
+
 def l2norm(t):
-    return F.normalize(t, dim = -1)
+    return F.normalize(t, dim=-1)
+
 
 # tensor helpers
 
@@ -57,8 +65,9 @@ def get_mask_subset_prob(mask, prob):
 def get_mask_special_tokens(ids, special_ids):
     mask = torch.zeros_like(ids).bool()
     for special_id in special_ids:
-        mask |= (ids==special_id)
+        mask |= (ids == special_id)
     return mask
+
 
 # network builder helpers
 def _get_activation_fn(activation):
@@ -69,10 +78,12 @@ def _get_activation_fn(activation):
 
     raise RuntimeError("activation should be relu/gelu, not {}".format(activation))
 
+
 # classifier free guidance functions
 
 def uniform(shape, device=None):
     return torch.zeros(shape, device=device).float().uniform_(0, 1)
+
 
 def prob_mask_like(shape, prob, device=None):
     if prob == 1:
@@ -82,16 +93,19 @@ def prob_mask_like(shape, prob, device=None):
     else:
         return uniform(shape, device=device) < prob
 
+
 # sampling helpers
 
-def log(t, eps = 1e-20):
-    return torch.log(t.clamp(min = eps))
+def log(t, eps=1e-20):
+    return torch.log(t.clamp(min=eps))
+
 
 def gumbel_noise(t):
     noise = torch.zeros_like(t).uniform_(0, 1)
     return -log(-log(noise))
 
-def gumbel_sample(t, temperature = 1., dim = 1):
+
+def gumbel_sample(t, temperature=1., dim=1):
     return ((t / max(temperature, 1e-10)) + gumbel_noise(t)).argmax(dim=dim)
 
 
@@ -103,9 +117,9 @@ def gumbel_sample(t, temperature = 1., dim = 1):
 #        [[  -inf,   -inf, 0.9771,   -inf,   -inf,   -inf],
 #         [  -inf,   -inf, 0.6628,   -inf,   -inf,   -inf],
 #         [0.9428,   -inf,   -inf,   -inf,   -inf,   -inf]]
-def top_k(logits, thres = 0.9, dim = 1):
+def top_k(logits, thres=0.9, dim=1):
     k = math.ceil((1 - thres) * logits.shape[dim])
-    val, ind = logits.topk(k, dim = dim)
+    val, ind = logits.topk(k, dim=dim)
     probs = torch.full_like(logits, float('-inf'))
     probs.scatter_(dim, ind, val)
     # func verified
@@ -114,20 +128,24 @@ def top_k(logits, thres = 0.9, dim = 1):
     # raise
     return probs
 
+
 # noise schedules
 
 # More on large value, less on small
 def cosine_schedule(t):
     return torch.cos(t * math.pi * 0.5)
 
+
 def scale_cosine_schedule(t, scale):
-    return torch.clip(scale*torch.cos(t * math.pi * 0.5) + 1 - scale, min=0., max=1.)
+    return torch.clip(scale * torch.cos(t * math.pi * 0.5) + 1 - scale, min=0., max=1.)
+
 
 # More on small value, less on large
 def q_schedule(bs, low, high, device):
     noise = uniform((bs,), device=device)
     schedule = 1 - cosine_schedule(noise)
     return torch.round(schedule * (high - low - 1)).long() + low
+
 
 def cal_performance(pred, labels, ignore_index=None, smoothing=0., tk=1):
     loss = cal_loss(pred, labels, ignore_index, smoothing=smoothing)
@@ -160,6 +178,16 @@ def cal_loss(pred, labels, ignore_index=None, smoothing=0.):
         # loss = F.cross_entropy(pred, sm_one_hot, reduction='none')
         loss = torch.mean(loss.masked_select(mask))
     else:
-        loss = F.cross_entropy(pred, labels, ignore_index=ignore_index)
+        # loss = F.cross_entropy(pred, labels, ignore_index=ignore_index)
+        mask = labels.ne(ignore_index)
+        if mask.sum() == 0:
+            loss = torch.tensor(0.).to(pred)
+        else:
+            pred = pred.permute(0, 2, 1)[mask]
+            labels = labels[mask]
+            prob = torch.gather(F.softmax(pred, dim=1), 1, labels.unsqueeze(1)).squeeze(1)
+            logit = torch.gather(pred, 1, labels.unsqueeze(1)).squeeze(1)
+            loss = -(1 - prob) ** 2 * (logit - torch.logsumexp(pred, dim=1))
+            loss = torch.mean(loss)
 
     return loss

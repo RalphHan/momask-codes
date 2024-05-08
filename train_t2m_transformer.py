@@ -44,7 +44,15 @@ if __name__ == '__main__':
     parser = TrainT2MOptions()
     opt = parser.parse()
     opt.vq_name = "test"
-    opt.name = "test_base"
+    opt.name = "test_large"
+    opt.latent_dim = 768
+    opt.n_heads = 12
+    opt.n_layers = 12
+    opt.ff_size = 3072
+    opt.milestones = [225_000]
+    opt.warm_up_iter = 3000
+    opt.log_every = 75
+    opt.save_latest = 15000
     parser.save()
 
     fixseed(opt.seed)
@@ -56,7 +64,7 @@ if __name__ == '__main__':
     os.makedirs(opt.model_dir, exist_ok=True)
     os.makedirs(opt.log_dir, exist_ok=True)
 
-    opt.data_root = './dataset/mootion/'
+    opt.data_root = './dataset/mootion2/'
     opt.joints_num = 24
     dim_pose = 3 + 24 * 6
     radius = 4
