@@ -44,9 +44,16 @@ if __name__ == '__main__':
     parser = TrainT2MOptions()
     opt = parser.parse()
     opt.vq_name = "test"
-    opt.name = "test_res"
+    opt.name = "test_res2"
     opt.share_weight = True
     opt.cond_drop_prob = 0.2
+
+    ### new added ###
+    opt.max_epoch = 50
+    opt.milestones = [75_000]
+    opt.warm_up_iter = 1000
+    opt.log_every = 75
+    opt.save_latest = 15000
     parser.save()
 
     fixseed(opt.seed)
@@ -58,7 +65,7 @@ if __name__ == '__main__':
     os.makedirs(opt.model_dir, exist_ok=True)
     os.makedirs(opt.log_dir, exist_ok=True)
 
-    opt.data_root = './dataset/mootion/'
+    opt.data_root = './dataset/mootion2/'
     opt.joints_num = 24
     dim_pose = 3 + 24 * 6
     radius = 4
@@ -107,6 +114,11 @@ if __name__ == '__main__':
                               shuffle=True, drop_last=True)
     val_loader = DataLoader(val_dataset, batch_size=opt.batch_size, num_workers=4, collate_fn=collate_fn,
                             shuffle=True, drop_last=True)
+
+    ckpt = torch.load("./checkpoints/t2m/test_res/model/latest.tar", map_location="cpu")
+    missing_keys, unexpected_keys = res_transformer.load_state_dict(ckpt['res_transformer'], strict=False)
+    assert len(unexpected_keys) == 0
+    assert all([k.startswith('clip_model.') for k in missing_keys])
 
     trainer = ResidualTransformerTrainer(opt, res_transformer, vq_model)
 

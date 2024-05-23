@@ -43,8 +43,13 @@ def mirror_motion(rotations, root_positions):
 def motion_to_147(rotations, root_positions):
     velocity = root_positions.copy()
     with torch.no_grad():
-        rotation_6d = geometry.axis_angle_to_rotation_6d(
-            torch.tensor(rotations, dtype=torch.float32)).reshape(-1, 24 * 6).numpy()
+        # rotation_6d = geometry.axis_angle_to_rotation_6d(
+        #     torch.tensor(rotations, dtype=torch.float32)).reshape(-1, 24 * 6).numpy()
+        matrix = geometry.axis_angle_to_matrix(
+            torch.tensor(rotations, dtype=torch.float32)).reshape(-1, 24, 3, 3)
+        root_matrix = matrix[1:, 0] @ matrix[:-1, 0].inverse()
+        matrix[1:, 0] = root_matrix
+        rotation_6d = geometry.matrix_to_rotation_6d(matrix).reshape(-1, 24 * 6).numpy()
     velocity[1:, [0, 2]] = root_positions[1:, [0, 2]] - root_positions[:-1, [0, 2]]
     velocity[0, [0, 2]] = 0
     rotations_147 = np.concatenate([velocity, rotation_6d], axis=1, dtype=np.float32)

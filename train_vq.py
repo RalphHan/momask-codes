@@ -3,11 +3,13 @@ import random
 from os.path import join as pjoin
 
 import torch
+
+torch.autograd.set_detect_anomaly(True)
 from torch.utils.data import DataLoader
 
 from models.vq.model import RVQVAE
 from models.vq.vq_trainer import RVQTokenizerTrainer
-from options.vq_option import arg_parse
+from options.vq_option import arg_parse, save_arg_parse
 from data.t2m_dataset import MotionDataset
 from utils.paramUtil import t2m_kinematic_chain
 
@@ -25,6 +27,13 @@ def plot_t2m(data, save_dir):
 
 if __name__ == "__main__":
     opt = arg_parse(True)
+    opt.name = "test2"
+    opt.max_epoch = 2
+    opt.milestones = [75_000, 125_000]
+    opt.warm_up_iter = 1000
+    opt.log_every = 75
+    opt.save_latest = 15000
+    save_arg_parse(opt)
 
     opt.device = torch.device("cpu" if opt.gpu_id == -1 else "cuda:" + str(opt.gpu_id))
     print(f"Using Device: {opt.device}")
@@ -40,7 +49,7 @@ if __name__ == "__main__":
     os.makedirs(opt.eval_dir, exist_ok=True)
     os.makedirs(opt.log_dir, exist_ok=True)
 
-    opt.data_root = './dataset/mootion/'
+    opt.data_root = './dataset/mootion2/'
     opt.joints_num = 24
     dim_pose = 3 + 24 * 6
     radius = 4
@@ -71,10 +80,14 @@ if __name__ == "__main__":
 
     print('Total parameters of all models: {}M'.format(pc_vq / 1000_000))
 
+    ckpt = torch.load("./checkpoints/t2m/test/model/latest.tar", map_location='cpu')
+    model_key = 'vq_model' if 'vq_model' in ckpt else 'net'
+    net.load_state_dict(ckpt[model_key])
+
     trainer = RVQTokenizerTrainer(opt, vq_model=net)
 
-    train_dataset = MotionDataset(opt, train_split, "./dataset/mootion_train.pk")
-    val_dataset = MotionDataset(opt, val_split, "./dataset/mootion_val.pk")
+    train_dataset = MotionDataset(opt, train_split, "./dataset/mootion2_train.pk")
+    val_dataset = MotionDataset(opt, val_split, "./dataset/mootion2_val.pk")
 
     train_loader = DataLoader(train_dataset, batch_size=opt.batch_size, drop_last=True, num_workers=4,
                               shuffle=True, pin_memory=True)

@@ -48,9 +48,9 @@ class RVQTokenizerTrainer:
 
         # velocity loss
         model_out_v = pred_motion[:, 1:] - pred_motion[:, :-1]
-        model_out_v[:, :, [0, 2]] = pred_motion[:, 1:, [0, 2]]
+        # model_out_v[:, :, [0, 2]] = pred_motion[:, 1:, [0, 2]]
         target_v = motions[:, 1:] - motions[:, :-1]
-        target_v[:, :, [0, 2]] = motions[:, 1:, [0, 2]]
+        # target_v[:, :, [0, 2]] = motions[:, 1:, [0, 2]]
         loss_v = self.l1_criterion(model_out_v, target_v)
 
         # FK loss
@@ -59,12 +59,24 @@ class RVQTokenizerTrainer:
         model_x = pred_motion[:, :, :3].clone()
         model_x[:, :, [0, 2]] = torch.cumsum(model_x[:, :, [0, 2]], dim=1)
         model_x = model_x.reshape(b * s, -1)
-        model_q = geometry.rotation_6d_to_axis_angle(pred_motion[:, :, 3:].reshape(b, s, -1, 6)).reshape(b * s, -1)
+        model_m = geometry.rotation_6d_to_matrix(pred_motion[:, :, 3:].reshape(b, s, -1, 6))
+        model_root_m = [model_m[:, 0, 0]]
+        for i in range(1, s):
+            model_root_m.append(model_m[:, i, 0] @ model_root_m[-1])
+        model_root_m = torch.stack(model_root_m, dim=1)
+        model_m = torch.cat((model_root_m[:, :, None], model_m[:, :, 1:]), dim=2)
+        model_q = geometry.matrix_to_axis_angle(model_m).reshape(b * s, -1)
 
         target_x = motions[:, :, :3].clone()
         target_x[:, :, [0, 2]] = torch.cumsum(target_x[:, :, [0, 2]], dim=1)
         target_x = target_x.reshape(b * s, -1)
-        target_q = geometry.rotation_6d_to_axis_angle(motions[:, :, 3:].reshape(b, s, -1, 6)).reshape(b * s, -1)
+        target_m = geometry.rotation_6d_to_matrix(motions[:, :, 3:].reshape(b, s, -1, 6))
+        target_root_m = [target_m[:, 0, 0]]
+        for i in range(1, s):
+            target_root_m.append(target_m[:, i, 0] @ target_root_m[-1])
+        target_root_m = torch.stack(target_root_m, dim=1)
+        target_m = torch.cat((target_root_m[:, :, None], target_m[:, :, 1:]), dim=2)
+        target_q = geometry.matrix_to_axis_angle(target_m).reshape(b * s, -1)
 
         model_xp = self.smpl(global_orient=model_q[:, :3], body_pose=model_q[:, 3:], transl=model_x).joints
         target_xp = self.smpl(global_orient=target_q[:, :3], body_pose=target_q[:, 3:], transl=target_x).joints

@@ -2,6 +2,7 @@ import argparse
 import os
 import torch
 
+
 def arg_parse(is_train=False):
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
@@ -16,7 +17,8 @@ def arg_parse(is_train=False):
     # parser.add_argument('--total_iter', default=None, type=int, help='number of total iterations to run')
     parser.add_argument('--warm_up_iter', default=2000, type=int, help='number of total iterations for warmup')
     parser.add_argument('--lr', default=2e-4, type=float, help='max learning rate')
-    parser.add_argument('--milestones', default=[150000, 250000], nargs="+", type=int, help="learning rate schedule (iterations)")
+    parser.add_argument('--milestones', default=[150000, 250000], nargs="+", type=int,
+                        help="learning rate schedule (iterations)")
     parser.add_argument('--gamma', default=0.05, type=float, help="learning rate decay")
 
     parser.add_argument('--weight_decay', default=0.0, type=float, help='weight decay')
@@ -45,9 +47,8 @@ def arg_parse(is_train=False):
 
     parser.add_argument('--ext', type=str, default='default', help='reconstruction loss')
 
-
     ## other
-    parser.add_argument('--name', type=str, default="test", help='Name of this trial')
+    parser.add_argument('--name', type=str, default="test2", help='Name of this trial')
     parser.add_argument('--is_continue', action="store_true", help='Name of this trial')
     parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
     parser.add_argument('--log_every', default=10, type=int, help='iter log frequency')
@@ -67,7 +68,6 @@ def arg_parse(is_train=False):
 
     opt = parser.parse_args()
     torch.cuda.set_device(opt.gpu_id)
-
     args = vars(opt)
 
     print('------------ Options -------------')
@@ -75,8 +75,13 @@ def arg_parse(is_train=False):
         print('%s: %s' % (str(k), str(v)))
     print('-------------- End ----------------')
     opt.is_train = is_train
-    if is_train:
-    # save to the disk
+    return opt
+
+
+def save_arg_parse(opt):
+    args = vars(opt)
+    if opt.is_train:
+        # save to the disk
         expr_dir = os.path.join(opt.checkpoints_dir, opt.dataset_name, opt.name)
         if not os.path.exists(expr_dir):
             os.makedirs(expr_dir)
@@ -86,4 +91,3 @@ def arg_parse(is_train=False):
             for k, v in sorted(args.items()):
                 opt_file.write('%s: %s\n' % (str(k), str(v)))
             opt_file.write('-------------- End ----------------\n')
-    return opt
