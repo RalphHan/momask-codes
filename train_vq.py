@@ -4,7 +4,7 @@ from os.path import join as pjoin
 
 import torch
 
-torch.autograd.set_detect_anomaly(True)
+# torch.autograd.set_detect_anomaly(True)
 from torch.utils.data import DataLoader
 
 from models.vq.model import RVQVAE

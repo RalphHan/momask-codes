@@ -20,7 +20,7 @@ device = torch.device("cuda")
 
 
 def load_vq_model():
-    vq_opt = get_opt("./checkpoints/t2m/test/opt.txt", device=device)
+    vq_opt = get_opt("./checkpoints/t2m/test2/opt.txt", device=device)
     vq_opt.dim_pose = 3 + 24 * 6
     vq_model = RVQVAE(vq_opt,
                       vq_opt.dim_pose,
@@ -34,7 +34,7 @@ def load_vq_model():
                       vq_opt.dilation_growth_rate,
                       vq_opt.vq_act,
                       vq_opt.vq_norm)
-    ckpt = torch.load("./checkpoints/t2m/test/model/latest.tar", map_location='cpu')
+    ckpt = torch.load("./checkpoints/t2m/test2/model/latest.tar", map_location='cpu')
     model_key = 'vq_model' if 'vq_model' in ckpt else 'net'
     vq_model.load_state_dict(ckpt[model_key])
     print(f'Loading VQ Model {vq_opt.name} Completed!')
@@ -44,7 +44,7 @@ def load_vq_model():
 
 
 def load_trans_model(vq_opt):
-    model_opt = get_opt("./checkpoints/t2m/test_large/opt.txt", device=device)
+    model_opt = get_opt("./checkpoints/t2m/test_large2/opt.txt", device=device)
     model_opt.num_tokens = vq_opt.nb_code
     model_opt.num_quantizers = vq_opt.num_quantizers
     model_opt.code_dim = vq_opt.code_dim
@@ -59,7 +59,8 @@ def load_trans_model(vq_opt):
                                       cond_drop_prob=model_opt.cond_drop_prob,
                                       clip_version=clip_version,
                                       opt=model_opt)
-    ckpt = torch.load("./checkpoints/t2m/test_large/model/E120I0540000.tar", map_location='cpu')
+    # ckpt = torch.load("./checkpoints/t2m/test_large/model/E120I0540000.tar", map_location='cpu')
+    ckpt = torch.load("./checkpoints/t2m/test_large2/model/latest.tar", map_location='cpu')
     model_key = 't2m_transformer' if 't2m_transformer' in ckpt else 'trans'
     missing_keys, unexpected_keys = t2m_transformer.load_state_dict(ckpt[model_key], strict=False)
     assert len(unexpected_keys) == 0
@@ -71,7 +72,7 @@ def load_trans_model(vq_opt):
 
 
 def load_res_model(vq_opt):
-    res_opt = get_opt("./checkpoints/t2m/test_res2/opt.txt", device=device)
+    res_opt = get_opt("./checkpoints/t2m/test_res3/opt.txt", device=device)
     res_opt.num_quantizers = vq_opt.num_quantizers
     res_opt.num_tokens = vq_opt.nb_code
     res_transformer = ResidualTransformer(code_dim=vq_opt.code_dim,
@@ -89,7 +90,7 @@ def load_res_model(vq_opt):
                                           clip_version=clip_version,
                                           opt=res_opt)
 
-    ckpt = torch.load("./checkpoints/t2m/test_res2/model/latest.tar", map_location='cpu')
+    ckpt = torch.load("./checkpoints/t2m/test_res3/model/latest.tar", map_location='cpu')
     missing_keys, unexpected_keys = res_transformer.load_state_dict(ckpt['res_transformer'], strict=False)
     assert len(unexpected_keys) == 0
     assert all([k.startswith('clip_model.') for k in missing_keys])
