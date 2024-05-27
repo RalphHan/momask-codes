@@ -14,6 +14,9 @@ import binascii
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import sys
+from utils.my_smpl import MySMPL
+
+from numba import jit
 
 clip_version = 'ViT-B/32'
 device = torch.device("cuda")
@@ -60,7 +63,7 @@ def load_trans_model(vq_opt):
                                       clip_version=clip_version,
                                       opt=model_opt)
     # ckpt = torch.load("./checkpoints/t2m/test_large/model/E120I0540000.tar", map_location='cpu')
-    ckpt = torch.load("./checkpoints/t2m/test_large2/model/latest.tar", map_location='cpu')
+    ckpt = torch.load("./checkpoints/t2m/test_large2/model/E36I0165000.tar", map_location='cpu')
     model_key = 't2m_transformer' if 't2m_transformer' in ckpt else 'trans'
     missing_keys, unexpected_keys = t2m_transformer.load_state_dict(ckpt[model_key], strict=False)
     assert len(unexpected_keys) == 0
@@ -122,8 +125,31 @@ def init_data():
     data["vq_model"] = vq_model
     data["t2m_transformer"] = t2m_transformer
     data["res_transformer"] = res_transformer
+    data['smpl'] = MySMPL("checkpoints/smpl", gender="neutral", ext="pkl").to(device)
     data["opt"] = opt
     return data
+
+
+@jit(nopython=True)
+def accumulate_clip_y(y, leg, v):
+    y[0] = min(max(y[0], leg[0]), 5.0)
+    for i in range(1, len(y)):
+        y[i] = min(max(y[i - 1] + v[i - 1], leg[i]), 5.0)
+
+
+def fix_motion(root_positions, rotations):
+    joints = data['smpl'](global_orient=rotations[:, 0],
+                          body_pose=rotations[:, 1:].reshape(-1, 23 * 3),
+                          transl=root_positions).joints
+    min_y = joints[..., 1].min(1).values
+    minmin_y = min_y.min()
+    root_positions[:, 1] -= minmin_y
+    min_y -= minmin_y
+    leg_y = torch.clip(root_positions[:, 1] - min_y, 0.0, 5.0)
+    vy = root_positions[1:, 1] - root_positions[:-1, 1]
+    root_positions = root_positions.cpu().numpy()
+    accumulate_clip_y(root_positions[:, 1], leg_y.cpu().numpy(), vy.cpu().numpy())
+    return root_positions.astype(np.float32), rotations.cpu().numpy().astype(np.float32)
 
 
 @app.get("/angle/")
@@ -155,13 +181,14 @@ async def angle(prompt: str, length: int = -1, temp: float = 1.0):
         b, s, c = pred_motion.shape
         model_x = pred_motion[:, :, :3].clone()
         model_x[:, :, [0, 2]] = torch.cumsum(model_x[:, :, [0, 2]], dim=1)
-        root_positions = model_x[0, :m_length[0]].cpu().numpy()
+        root_positions = model_x[0, :m_length[0]]
 
         model_m = geometry.rotation_6d_to_matrix(pred_motion[:, :, 3:].reshape(b, s, -1, 6))
         for i in range(1, s):
             model_m[:, i, 0] @= model_m[:, i - 1, 0]
         model_q = geometry.matrix_to_axis_angle(model_m)
-        rotations = model_q[0, :m_length[0]].cpu().numpy()
+        rotations = model_q[0, :m_length[0]]
+        root_positions, rotations = fix_motion(root_positions, rotations)
 
     return {"root_positions": binascii.b2a_base64(
         root_positions.flatten().astype(np.float32).tobytes()).decode("utf-8"),
