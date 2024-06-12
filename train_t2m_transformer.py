@@ -1,3 +1,4 @@
+import json
 import os
 import torch
 import random
@@ -10,6 +11,7 @@ from models.mask_transformer.transformer_trainer import MaskTransformerTrainer
 from models.vq.model import RVQVAE
 
 from options.train_option import TrainT2MOptions
+from tqdm import tqdm
 
 from utils.get_opt import get_opt
 from utils.fixseed import fixseed
@@ -32,7 +34,7 @@ def load_vq_model():
                       vq_opt.dilation_growth_rate,
                       vq_opt.vq_act,
                       vq_opt.vq_norm)
-    ckpt = torch.load(pjoin(vq_opt.checkpoints_dir, vq_opt.dataset_name, vq_opt.name, 'model', 'latest.tar'),
+    ckpt = torch.load(pjoin(vq_opt.checkpoints_dir, vq_opt.dataset_name, vq_opt.name, 'model', 'E01I0020000.tar'),
                       map_location='cpu')
     model_key = 'vq_model' if 'vq_model' in ckpt else 'net'
     vq_model.load_state_dict(ckpt[model_key])
@@ -43,8 +45,8 @@ def load_vq_model():
 if __name__ == '__main__':
     parser = TrainT2MOptions()
     opt = parser.parse()
-    opt.vq_name = "test2"
-    opt.name = "test_large2"
+    opt.vq_name = "test2_ft"
+    opt.name = "test_large_ft2"
     opt.latent_dim = 768
     opt.n_heads = 12
     opt.n_layers = 12
@@ -53,13 +55,17 @@ if __name__ == '__main__':
     # opt.warm_up_iter = 3000
     # opt.log_every = 75
     # opt.save_latest = 15000
-    
+
     ### new added ###
-    opt.max_epoch = 50
-    opt.milestones = [75_000]
-    opt.warm_up_iter = 1000
+    # opt.max_epoch = 50
+    # opt.milestones = [75_000]
+    # opt.warm_up_iter = 1000
+    # opt.log_every = 75
+    # opt.save_latest = 15000
+    opt.milestones = [15_000]
+    opt.warm_up_iter = 200
     opt.log_every = 75
-    opt.save_latest = 15000
+    opt.save_latest = 5000
 
     parser.save()
 
@@ -77,6 +83,7 @@ if __name__ == '__main__':
     dim_pose = 3 + 24 * 6
     radius = 4
     fps = 30
+    finetune = True
 
     vq_model, vq_opt = load_vq_model()
 
@@ -102,12 +109,28 @@ if __name__ == '__main__':
 
     print('Total parameters of all models: {:.2f}M'.format(all_params / 1000_000))
 
-    motions = sorted(os.listdir(opt.data_root))
+    if not finetune:
+        motions = os.listdir(opt.data_root)
+        val_cnt = 5000
+    else:
+        motions = []
+        for motion in tqdm(os.listdir(opt.data_root)):
+            if motion.startswith('C'):
+                motions.append(motion)
+            elif motion.startswith('M'):
+                with open(pjoin(opt.data_root, motion), 'r') as f:
+                    data = json.load(f)
+                    if "_" not in data['mid']:
+                        motions.append(motion)
+        print(len([m for m in motions if m.startswith('C')]), len([m for m in motions if m.startswith('M')]))
+        val_cnt = 1000
+    motions = sorted(motions)
+
     random.seed(12321)
     random.shuffle(motions)
     random.seed()
-    train_split = motions[:-5000]
-    val_split = motions[-5000:]
+    train_split = motions[:-val_cnt]
+    val_split = motions[-val_cnt:]
 
     train_dataset = Text2MotionDataset(opt, train_split)
     val_dataset = Text2MotionDataset(opt, val_split)
@@ -117,7 +140,7 @@ if __name__ == '__main__':
     val_loader = DataLoader(val_dataset, batch_size=opt.batch_size, num_workers=4, collate_fn=collate_fn,
                             shuffle=True, drop_last=True)
 
-    ckpt = torch.load("./checkpoints/t2m/test_large/model/E120I0540000.tar", map_location="cpu")
+    ckpt = torch.load("./checkpoints/t2m/test_large2/model/E36I0165000.tar", map_location="cpu")
     model_key = 't2m_transformer' if 't2m_transformer' in ckpt else 'trans'
     missing_keys, unexpected_keys = t2m_transformer.load_state_dict(ckpt[model_key], strict=False)
     assert len(unexpected_keys) == 0

@@ -14,6 +14,8 @@ from data.t2m_dataset import MotionDataset
 from utils.paramUtil import t2m_kinematic_chain
 
 from utils.plot_script import plot_3d_motion
+from tqdm import tqdm
+import json
 
 os.environ["OMP_NUM_THREADS"] = "1"
 
@@ -27,12 +29,17 @@ def plot_t2m(data, save_dir):
 
 if __name__ == "__main__":
     opt = arg_parse(True)
-    opt.name = "test2"
-    opt.max_epoch = 2
-    opt.milestones = [75_000, 125_000]
-    opt.warm_up_iter = 1000
+    opt.name = "test2_ft"
+    # opt.max_epoch = 2
+    # opt.milestones = [75_000, 125_000]
+    # opt.warm_up_iter = 1000
+    # opt.log_every = 75
+    # opt.save_latest = 15000
+
+    opt.milestones = [10_000, 17_000]
+    opt.warm_up_iter = 200
     opt.log_every = 75
-    opt.save_latest = 15000
+    opt.save_latest = 5000
     save_arg_parse(opt)
 
     opt.device = torch.device("cpu" if opt.gpu_id == -1 else "cuda:" + str(opt.gpu_id))
@@ -54,13 +61,30 @@ if __name__ == "__main__":
     dim_pose = 3 + 24 * 6
     radius = 4
     fps = 30
+    finetune = True
 
-    motions = sorted(os.listdir(opt.data_root))
+    if not finetune:
+        motions = os.listdir(opt.data_root)
+        val_cnt = 5000
+    else:
+        motions = []
+        for motion in tqdm(os.listdir(opt.data_root)):
+            if motion.startswith('C'):
+                motions.append(motion)
+            elif motion.startswith('M'):
+                with open(pjoin(opt.data_root, motion), 'r') as f:
+                    data = json.load(f)
+                    if "_" not in data['mid']:
+                        motions.append(motion)
+        print(len([m for m in motions if m.startswith('C')]), len([m for m in motions if m.startswith('M')]))
+        val_cnt = 1000
+    motions = sorted(motions)
+
     random.seed(12321)
     random.shuffle(motions)
     random.seed()
-    train_split = motions[:-5000]
-    val_split = motions[-5000:]
+    train_split = motions[:-val_cnt]
+    val_split = motions[-val_cnt:]
 
     net = RVQVAE(opt,
                  dim_pose,
@@ -80,14 +104,14 @@ if __name__ == "__main__":
 
     print('Total parameters of all models: {}M'.format(pc_vq / 1000_000))
 
-    ckpt = torch.load("./checkpoints/t2m/test/model/latest.tar", map_location='cpu')
+    ckpt = torch.load("./checkpoints/t2m/test2/model/latest.tar", map_location='cpu')
     model_key = 'vq_model' if 'vq_model' in ckpt else 'net'
     net.load_state_dict(ckpt[model_key])
 
     trainer = RVQTokenizerTrainer(opt, vq_model=net)
 
-    train_dataset = MotionDataset(opt, train_split, "./dataset/mootion2_train.pk")
-    val_dataset = MotionDataset(opt, val_split, "./dataset/mootion2_val.pk")
+    train_dataset = MotionDataset(opt, train_split, "./dataset/mootion2_train_ft.pk")
+    val_dataset = MotionDataset(opt, val_split, "./dataset/mootion2_val_ft.pk")
 
     train_loader = DataLoader(train_dataset, batch_size=opt.batch_size, drop_last=True, num_workers=4,
                               shuffle=True, pin_memory=True)

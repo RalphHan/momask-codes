@@ -47,7 +47,7 @@ def load_vq_model():
 
 
 def load_trans_model(vq_opt):
-    model_opt = get_opt("./checkpoints/t2m/test_large2/opt.txt", device=device)
+    model_opt = get_opt("./checkpoints/t2m/test_large_ft/opt.txt", device=device)
     model_opt.num_tokens = vq_opt.nb_code
     model_opt.num_quantizers = vq_opt.num_quantizers
     model_opt.code_dim = vq_opt.code_dim
@@ -63,7 +63,9 @@ def load_trans_model(vq_opt):
                                       clip_version=clip_version,
                                       opt=model_opt)
     # ckpt = torch.load("./checkpoints/t2m/test_large/model/E120I0540000.tar", map_location='cpu')
-    ckpt = torch.load("./checkpoints/t2m/test_large2/model/E36I0165000.tar", map_location='cpu')
+    # ckpt = torch.load("./checkpoints/t2m/test_large2/model/E36I0165000.tar", map_location='cpu')
+    ckpt = torch.load("./checkpoints/t2m/test_large_ft/model/E63I0020000.tar", map_location='cpu')
+    # ckpt = torch.load("./checkpoints/t2m/test_large_ft2/model/E63I0020000.tar", map_location='cpu')
     model_key = 't2m_transformer' if 't2m_transformer' in ckpt else 'trans'
     missing_keys, unexpected_keys = t2m_transformer.load_state_dict(ckpt[model_key], strict=False)
     assert len(unexpected_keys) == 0
@@ -75,7 +77,7 @@ def load_trans_model(vq_opt):
 
 
 def load_res_model(vq_opt):
-    res_opt = get_opt("./checkpoints/t2m/test_res3/opt.txt", device=device)
+    res_opt = get_opt("./checkpoints/t2m/test_res_ft/opt.txt", device=device)
     res_opt.num_quantizers = vq_opt.num_quantizers
     res_opt.num_tokens = vq_opt.nb_code
     res_transformer = ResidualTransformer(code_dim=vq_opt.code_dim,
@@ -93,7 +95,9 @@ def load_res_model(vq_opt):
                                           clip_version=clip_version,
                                           opt=res_opt)
 
-    ckpt = torch.load("./checkpoints/t2m/test_res3/model/latest.tar", map_location='cpu')
+    # ckpt = torch.load("./checkpoints/t2m/test_res_ft2/model/E79I0025000.tar", map_location='cpu')
+    ckpt = torch.load("./checkpoints/t2m/test_res_ft/model/E79I0025000.tar", map_location='cpu')
+    # ckpt = torch.load("./checkpoints/t2m/test_res3/model/latest.tar", map_location='cpu')
     missing_keys, unexpected_keys = res_transformer.load_state_dict(ckpt['res_transformer'], strict=False)
     assert len(unexpected_keys) == 0
     assert all([k.startswith('clip_model.') for k in missing_keys])
