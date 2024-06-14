@@ -46,7 +46,7 @@ if __name__ == '__main__':
     parser = TrainT2MOptions()
     opt = parser.parse()
     opt.vq_name = "test2_ft"
-    opt.name = "test_large_ft2"
+    opt.name = "test_large25_ft"
     opt.latent_dim = 768
     opt.n_heads = 12
     opt.n_layers = 12
@@ -140,7 +140,7 @@ if __name__ == '__main__':
     val_loader = DataLoader(val_dataset, batch_size=opt.batch_size, num_workers=4, collate_fn=collate_fn,
                             shuffle=True, drop_last=True)
 
-    ckpt = torch.load("./checkpoints/t2m/test_large2/model/E36I0165000.tar", map_location="cpu")
+    ckpt = torch.load("./checkpoints/t2m/test_large25/model/E36I0165000.tar", map_location="cpu")
     model_key = 't2m_transformer' if 't2m_transformer' in ckpt else 'trans'
     missing_keys, unexpected_keys = t2m_transformer.load_state_dict(ckpt[model_key], strict=False)
     assert len(unexpected_keys) == 0
