@@ -1,3 +1,14 @@
+from setproctitle import setproctitle
+
+setproctitle('momask')
+import dotenv
+
+dotenv.load_dotenv()
+import openai, os
+
+openai.api_key = os.getenv("OPENAI_API_KEY")
+openai.organization = os.getenv("OPENAI_ORGANIZATION")
+
 import torch
 import utils.rotation_conversions as geometry
 
@@ -15,7 +26,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import sys
 from utils.my_smpl import MySMPL
-
 from numba import jit
 
 clip_version = 'ViT-B/32'
@@ -158,8 +168,46 @@ def fix_motion(root_positions, rotations):
     return root_positions.astype(np.float32), rotations.cpu().numpy().astype(np.float32)
 
 
+PROMPT = """You are a linguistician with expertise in expressing human motions. You translate user input into a short and precise English phrase to describe a human motion, like "a person is doing some action.", by following these rules:
+
+(1) Always output in English. Whatever language the user input is in, you must translate the user input into an English phrase and only focus on the motion part. E.g., you translate "我在游泳" to "A person is swimming."
+
+(2) Always describe a motion. Even if user input has no explicit meaning of a motion, you still translate it into a motion description with a linguistic technique called "Synaesthesia." Synaesthesia corresponds with the human brain's thinking, where a description leads to an association with a different, unrelated scenario. Take human actions as an example: "The wind blowing and leaves swaying" can be linked to "A person is swaying their arms dancing."; "A towering mountain" can be associated with "A person is standing silently."; and "Colorful clouds" can be connected to "A person is jumping around.".
+
+(3) Best association. Connect a best-associated motion to the user input if it is a person's name or a concept related to a person. For example, "Michael Jackson" can result in "A person is dancing moonwalk steps.".
+
+(4) Describe the motion in detail when there is enough info. For example, for the user input, "A person opening their arms in a welcoming gesture.", you can output "A person is standing, raising and waving both arms."
+
+(5) When the input includes terminology, try to retain them as much as possible in the output.
+
+"""
+
+
+async def translation(prompt):
+    for i in range(5):
+        try:
+            ret = await openai.ChatCompletion.acreate(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "system",
+                           "content": PROMPT
+                           },
+                          {"role": "user", "content": prompt}],
+                timeout=10,
+                request_timeout=10,
+            )
+            prompt = ret["choices"][0]["message"]["content"]
+            print(f"After translation: " + prompt + " -- Usage: " +
+                  str(ret["usage"].to_dict()).replace("\n", ""))
+            return prompt
+        except Exception:
+            pass
+    print("Error 501, translation failed")
+    return prompt
+
+
 @app.get("/angle/")
 async def angle(prompt: str, length: int = -1, temp: float = 1.0):
+    prompt = await translation(prompt)
     vq_model, t2m_transformer, res_transformer, opt = data["vq_model"], data["t2m_transformer"], data[
         "res_transformer"], data["opt"]
     if length == -1:
